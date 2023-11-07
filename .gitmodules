@@ -1,0 +1,13 @@
+[submodule "external/glm"]
+	path = external/glm
+	url = https://github.com/g-truc/glm
+[submodule "assets"]
+	path = assets
+	url = https://github.com/SaschaWillems/Vulkan-Assets
+	branch = main
+[submodule "external/metis"]
+	path = external/metis
+	url = https://github.com/KarypisLab/METIS
+[submodule "external/OpenMesh"]
+	path = external/OpenMesh
+	url = https://gitlab.vci.rwth-aachen.de:9000/OpenMesh/OpenMesh.git

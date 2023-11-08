@@ -127,7 +127,10 @@ vec3 calculateNormal()
 
 void main()
 {		
-	vec3 N = calculateNormal();
+	outColor = vec4(1.0);
+	return;
+	//vec3 N = calculateNormal();
+	vec3 N = inNormal;
 
 	vec3 V = normalize(ubo.camPos - inWorldPos);
 	vec3 R = reflect(-V, N); 

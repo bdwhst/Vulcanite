@@ -1,10 +1,12 @@
 set(headers
     "Cluster.h"
+    "MeshHandler.h"
 )
 
 set(sources
     "meshTest.cpp"
     "Cluster.cpp"
+    "MeshHandler.cpp"
 )
 
 source_group(Headers FILES ${headers})

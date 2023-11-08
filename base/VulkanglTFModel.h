@@ -267,6 +267,9 @@ namespace vkglTF
 			VkDeviceMemory memory;
 		} indices;
 
+		std::vector<uint32_t> indexBuffer;
+		std::vector<Vertex> vertexBuffer;
+
 		std::vector<Node*> nodes;
 		std::vector<Node*> linearNodes;
 

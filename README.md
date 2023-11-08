@@ -1,8 +1,21 @@
 # Vulcanite
 
+### Dependencies
+- metis
+- assimp
+- OpenMesh
+
 ### Build
 
+For now, we only test on Windows.
 
+For windows users, we recommend that you use [vcpkg](https://github.com/microsoft/vcpkg) to install dependencies.
+
+If you have successfully installed all dependencies through vcpkg, then this program should be able to run normally. 
+
+TODO: Windows, not using vcpkg
+
+TODO: Linux 
 
 ### TODOs
 
@@ -54,3 +67,22 @@
 - [Karis Nanite Talk SIG2021](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf)
 
 - [GAMES104_Lecture22.pdf (myqcloud.com)](https://games-1312234642.cos.ap-guangzhou.myqcloud.com/course/GAMES104/GAMES104_Lecture22.pdf)
+
+
+### Log
+
+11.8
+
+> We will not use OpenMesh to load mesh anymore. Consider using assimp.
+Two reasons mainly:
+1. OpenMesh is too slow.
+	- 50 seconds to load `dragon.obj`. 800k faces
+	- 6 seonds to load `bunny.obj`. 60k faces
+2. If we want to use half-edge data structure, that would require us to maintain this structure after every mesh simplification. Gonna bring a lot of problem.
+
+A better solution
+- Use `assimp` to load obj
+	- Note: `assimp` is also not very fast when loading meshes.
+		- 15 seconds to load `dragon.obj`. 800k faces
+		- 1.2 seonds to load `bunny.obj`. 60k faces
+- Construct adjacency graph 

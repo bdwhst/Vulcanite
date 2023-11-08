@@ -54,6 +54,32 @@ public:
 			vkCmdDrawIndexed(commandBuffer, prim.indexCount, 1, prim.firstIndex, 0, 0);
 		}
 	}
+	void vkglTFPrimitiveToOpenMesh(MyMesh& mymesh, const vkglTF::Primitive& prim)
+	{
+		int vertStart = prim.firstVertex;
+		int vertEnd = prim.firstVertex + prim.vertexCount;
+		std::vector<MyMesh::VertexHandle> vhandles;
+		for (int i = vertStart; i != vertEnd; i++)
+		{
+			auto& vert = model->vertexBuffer[i];
+			auto vhandle = mymesh.add_vertex(MyMesh::Point(vert.pos.x, vert.pos.y, vert.pos.z));
+			mymesh.set_normal(vhandle, MyMesh::Normal(vert.normal.x, vert.normal.y, vert.normal.z));
+			mymesh.set_texcoord2D(vhandle, MyMesh::TexCoord2D(vert.uv.x, vert.uv.y));
+			vhandles.emplace_back(vhandle);
+		}
+		int indStart = prim.firstIndex;
+		int indEnd = prim.firstIndex + prim.indexCount;
+		for (int i = indStart; i != indEnd; i += 3)
+		{
+			int i0 = model->indexBuffer[i] - vertStart, i1 = model->indexBuffer[i + 1] - vertStart, i2 = model->indexBuffer[i + 2] - vertStart;
+			std::vector<MyMesh::VertexHandle> face_vhandles;
+			face_vhandles.clear();
+			face_vhandles.emplace_back(vhandles[i0]);
+			face_vhandles.emplace_back(vhandles[i1]);
+			face_vhandles.emplace_back(vhandles[i2]);
+			mymesh.add_face(face_vhandles);
+		}
+	}
 	~MeshHandler() {
 		vkDestroyBuffer(device->logicalDevice, vertices.buffer, nullptr);
 		vkFreeMemory(device->logicalDevice, vertices.memory, nullptr);
@@ -132,29 +158,7 @@ private:
 		for (auto& prim : mesh.primitives)
 		{
 			MyMesh mymesh;
-			int vertStart = prim->firstVertex;
-			int vertEnd = prim->firstVertex + prim->vertexCount;
-			std::vector<MyMesh::VertexHandle> vhandles;
-			for (int i = vertStart; i != vertEnd; i++)
-			{
-				auto& vert = model->vertexBuffer[i];
-				auto vhandle = mymesh.add_vertex(MyMesh::Point(vert.pos.x, vert.pos.y, vert.pos.z));
-				mymesh.set_normal(vhandle, MyMesh::Normal(vert.normal.x, vert.normal.y, vert.normal.z));
-				mymesh.set_texcoord2D(vhandle, MyMesh::TexCoord2D(vert.uv.x, vert.uv.y));
-				vhandles.emplace_back(vhandle);
-			}
-			int indStart = prim->firstIndex;
-			int indEnd = prim->firstIndex + prim->indexCount;
-			for (int i = indStart; i != indEnd; i += 3)
-			{
-				int i0 = model->indexBuffer[i] - vertStart, i1 = model->indexBuffer[i + 1] - vertStart, i2 = model->indexBuffer[i + 2] - vertStart;
-				std::vector<MyMesh::VertexHandle> face_vhandles;
-				face_vhandles.clear();
-				face_vhandles.emplace_back(vhandles[i0]);
-				face_vhandles.emplace_back(vhandles[i1]);
-				face_vhandles.emplace_back(vhandles[i2]);
-				mymesh.add_face(face_vhandles);
-			}
+			vkglTFPrimitiveToOpenMesh(mymesh, *prim);
 
 			mymesh.request_face_status();
 			mymesh.request_edge_status();
@@ -179,12 +183,16 @@ private:
 					mymesh.status(mymesh.to_vertex_handle(*he_it)).set_locked(true);
 					mymesh.status(mymesh.from_vertex_handle(*he_it)).set_locked(true);
 				}
+			
 			size_t original_faces = mymesh.n_faces();
+			std::cout << "NUM FACES BEFORE: " << original_faces << std::endl;
 			double percentage = 0.2; 
 			size_t target_faces = static_cast<size_t>(original_faces * percentage);
 
 			decimater.decimate_to_faces(0, target_faces);
 			mymesh.garbage_collection();
+			size_t actual_faces = mymesh.n_faces();
+			std::cout << "NUM FACES AFTER: " << actual_faces << std::endl;
 
 			int newVertStart = vertexBuffer.size();
 			vkglTF::Primitive reducedPrim(*prim);

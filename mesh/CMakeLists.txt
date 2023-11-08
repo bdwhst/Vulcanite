@@ -9,6 +9,9 @@ set(sources
     "MeshHandler.cpp"
 )
 
+list(SORT headers)
+list(SORT sources)
+
 source_group(Headers FILES ${headers})
 source_group(Sources FILES ${sources})
 
@@ -24,7 +27,7 @@ set(APPLICATION_NAME mesh)
 
 find_package(OpenMesh REQUIRED)
 
-add_executable(${APPLICATION_NAME} ${sources})
+add_executable(${APPLICATION_NAME} ${sources} ${headers})
 target_include_directories(${APPLICATION_NAME} PRIVATE ${OPENMESH_INCLUDE_DIRS})
 target_link_libraries(${APPLICATION_NAME} 
   ${OPENMESH_LIBRARIES}

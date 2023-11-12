@@ -37,7 +37,7 @@ function(buildExample EXAMPLE_NAME SPIRV_DEPENDENCIES)
 	if(WIN32)
 		add_executable(${EXAMPLE_NAME} WIN32 ${MAIN_CPP} ${SOURCE} ${MAIN_HEADER} ${SHADERS_GLSL} ${SHADERS_HLSL} ${README_FILES})
 		find_package(openmesh REQUIRED)
-		target_link_libraries(${EXAMPLE_NAME} base ${Vulkan_LIBRARY} ${WINLIBS} ${OPENMESH_LIBRARIES})
+		target_link_libraries(${EXAMPLE_NAME} base mesh ${Vulkan_LIBRARY} ${WINLIBS} ${OPENMESH_LIBRARIES})
 		foreach(SHADER_SOURCE ${SHADERS_GLSL})
 		
 		get_filename_component(fname ${SHADER_SOURCE} NAME)

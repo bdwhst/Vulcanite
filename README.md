@@ -86,3 +86,47 @@ A better solution
 		- 15 seconds to load `dragon.obj`. 800k faces
 		- 1.2 seonds to load `bunny.obj`. 60k faces
 - Construct adjacency graph 
+
+11.9
+
+- vkgltf -> OpenMesh -> Clustering -> Cluster Grouping -> Simplification -> Re-clustering -> ... (Until only one cluster group)
+
+
+11.10
+
+Cluster result visualization
+Only test 5 clusters for now
+- Incorrect?
+	- Why are triangles that are not even adjacent getting assigned into the same cluster??? Is this right?
+	- May need to dig deeper into graph partition part...``
+![Alt text](./images/cluster_result_2023_11_10.png)
+
+11.11
+
+This might be because that each parts of teapot are not even connected???
+
+![Alt text](./images/teapot_inside.png)
+
+Clustering now works fine with fixed size 32.
+Howeve, the size is not fixed and it will fluctuate between 31 ~ 33.
+We need to consider **if it will bring more problems**.
+It should be solvable without using recursive partition?
+
+---
+- Milestone of cluster & cluster group
+<table>
+    <tr>
+        <th>Cluster</th>
+        <th>Cluster Group</th>
+    </tr>
+    <tr>
+        <th><img src="./images/bunny_cluster.png" /></th>
+        <th><img src="./images/bunny_cluster_group.png" /></th>
+    </tr>
+</table>
+
+![](./images/clustering_2023_11_11.gif)
+
+- **Limitations**
+	- Not fixed size
+	- Unconnected mesh

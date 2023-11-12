@@ -2,6 +2,7 @@ set(headers
     "Cluster.h"
     "MeshHandler.h"
     "Mesh.h"
+    "Graph.h"
     "utils.h"
 )
 
@@ -9,6 +10,7 @@ set(sources
     "meshTest.cpp"
     "Cluster.cpp"
     "MeshHandler.cpp"
+    "Graph.cpp"
     "Mesh.cpp"
 )
 
@@ -31,7 +33,13 @@ set(APPLICATION_NAME mesh)
 
 find_package(OpenMesh REQUIRED)
 
-add_executable(${APPLICATION_NAME} ${sources} ${headers})
+# add_executable(${APPLICATION_NAME} ${sources} ${headers})
+
+file(GLOB MESH_SRC ${sources} ${headers})
+file(GLOB MESH_HEADERS ${headers})
+
+add_library(${APPLICATION_NAME} STATIC ${MESH_SRC})
+
 target_include_directories(${APPLICATION_NAME} PRIVATE ${OPENMESH_INCLUDE_DIRS})
 target_link_libraries(${APPLICATION_NAME} 
 PRIVATE assimp::assimp

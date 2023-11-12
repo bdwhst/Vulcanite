@@ -4,6 +4,8 @@ layout (location = 0) in vec3 inWorldPos;
 layout (location = 1) in vec3 inNormal;
 layout (location = 2) in vec2 inUV;
 layout (location = 3) in vec4 inTangent;
+layout (location = 4) in vec4 inClusterInfos;
+layout (location = 5) in vec4 inClusterGroupInfos;
 
 layout (binding = 0) uniform UBO {
 	mat4 projection;
@@ -127,7 +129,16 @@ vec3 calculateNormal()
 
 void main()
 {		
-	outColor = vec4(1.0);
+	int clusterId = int(inClusterInfos.w);
+	vec3 clusterColor = inClusterInfos.xyz;
+	// Only set this for convenience, no physical meaning
+	if (uboParams.gamma < 2.15){
+		outColor = vec4(inClusterGroupInfos.xyz, 1.0); // Uncomment this line to see Cluster visualization
+	}
+	else{
+		outColor = vec4(inClusterInfos.xyz, 1.0); // Uncomment this line to see ClusterGroup visualization
+	}
+	//outColor = vec4(1.0);
 	return;
 	//vec3 N = calculateNormal();
 	vec3 N = inNormal;

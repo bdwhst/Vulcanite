@@ -3,12 +3,17 @@
 #include "VulkanDevice.h"
 #include "VulkanglTFModel.h"
 #include <vector>
+#include <unordered_map>
 
 #include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
 #include <OpenMesh/Tools/Decimater/DecimaterT.hh>
 #include <OpenMesh/Tools/Decimater/ModQuadricT.hh>
 #include <OpenMesh/Core/Geometry/QuadricT.hh>
+
+#include "Graph.h"
+#include "metis.h"
+#include "utils.h"
 
 struct MyTraits : public OpenMesh::DefaultTraits
 {
@@ -26,11 +31,129 @@ class MeshHandler {
 	std::vector<uint32_t> indexBuffer;
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
+
+	Graph triangleGraph;
+	int clusterNum;
+	const int targetClusterSize = 31;
+	std::vector<idx_t> triangleClusterIndex;
+	std::unordered_map<int, int> clusterColorAssignment;
+	const std::vector<glm::vec3> nodeColors =
+	{
+		glm::vec3(1.0f, 0.0f, 0.0f), // red
+		glm::vec3(0.0f, 1.0f, 0.0f), // green
+		glm::vec3(0.0f, 0.0f, 1.0f), // blue
+		glm::vec3(1.0f, 1.0f, 0.0f), // yellow
+		glm::vec3(1.0f, 0.0f, 1.0f), // purple
+		glm::vec3(0.0f, 1.0f, 1.0f), // cyan
+		glm::vec3(1.0f, 0.5f, 0.0f), // orange
+		glm::vec3(0.5f, 1.0f, 0.0f), // lime
+	};
+
+	Graph clusterGraph;
+	int clusterGroupNum;
+	const int targetClusterGroupSize = 16;
+	std::vector<idx_t> clusterGroupIndex;
+	std::unordered_map<int, int> clusterGroupColorAssignment;
+	std::vector<glm::vec3> clusterGroupColor;
 public:
 	void loadFromvkglTFModel(const vkglTF::Model& model)
 	{
 		this->model = &model;
 	}
+
+	void generateClusterInfos(const vkglTF::Model& model, vks::VulkanDevice* device, VkQueue transferQueue) 
+	{
+		this->model = &model;
+		for (auto& node : this->model->linearNodes)
+		{
+			if (node->mesh) {
+				MyMesh mymesh;
+				vkglTFMeshToOpenMesh(mymesh, *node->mesh);
+				// Generate cluster by partitioning triangle graph
+				triangleGraph = buildTriangleGraph(mymesh);
+				generateCluster(triangleGraph);
+				// Generate cluster group by partitioning cluster graph
+				clusterGraph = buildClusterGraph(mymesh);
+				colorClusterGraph(); // Cluster graph is needed to assign adjacent cluster different colors
+				generateClusterGroup(clusterGraph);
+				// load pos, normal, uv, cluserId, clusterGroupId into MeshHandler::vertexBuffer
+				loadFromOpenMesh(mymesh);
+			}
+		}
+		this->device = device;
+		createVertexBuffer(device, transferQueue);
+	}
+
+	void loadFromOpenMesh(const MyMesh& mesh)
+	{
+		for (MyMesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end(); ++f_it) {
+			MyMesh::FaceHandle face = *f_it;
+			for (MyMesh::FaceVertexIter fv_it = mesh.cfv_iter(face); fv_it.is_valid(); ++fv_it) {
+				MyMesh::VertexHandle vertex = *fv_it;
+				vkglTF::Vertex v;
+				v.pos = glm::vec3(mesh.point(vertex)[0], mesh.point(vertex)[1], mesh.point(vertex)[2]);
+				v.normal = glm::vec3(mesh.normal(vertex)[0], mesh.normal(vertex)[1], mesh.normal(vertex)[2]);
+				v.uv = glm::vec2(mesh.texcoord2D(vertex)[0], mesh.texcoord2D(vertex)[1]);
+				// TODO: v.tangent not assigned. How to assign?
+				// Assign clusterId and clusterGroupId
+				int clusterId = triangleClusterIndex[face.idx()];
+				v.joint0 = glm::vec4(nodeColors[clusterColorAssignment[clusterId]], clusterId);
+
+				int clusterGroupId = clusterGroupIndex[clusterId];
+				// Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
+				v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
+				vertexBuffer.push_back(v);
+			}
+		}
+	}
+
+	// Only create vertex buffer
+	void createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) 
+	{
+		size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
+		vertices.count = static_cast<uint32_t>(vertexBuffer.size());
+
+		assert(vertexBufferSize > 0);
+
+		struct StagingBuffer {
+			VkBuffer buffer;
+			VkDeviceMemory memory;
+		} vertexStaging;
+
+		// Create staging buffers
+		// Vertex data
+		VK_CHECK_RESULT(device->createBuffer(
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			vertexBufferSize,
+			&vertexStaging.buffer,
+			&vertexStaging.memory,
+			vertexBuffer.data()));
+
+		// Create device local buffers
+		// Vertex buffer
+		VK_CHECK_RESULT(device->createBuffer(
+			VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | vkglTF::memoryPropertyFlags,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			vertexBufferSize,
+			&vertices.buffer,
+			&vertices.memory));
+
+		// Copy from staging buffers
+		VkCommandBuffer copyCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkBufferCopy copyRegion = {};
+
+		copyRegion.size = vertexBufferSize;
+		vkCmdCopyBuffer(copyCmd, vertexStaging.buffer, vertices.buffer, 1, &copyRegion);
+
+		device->flushCommandBuffer(copyCmd, transferQueue, true);
+
+		vkDestroyBuffer(device->logicalDevice, vertexStaging.buffer, nullptr);
+		vkFreeMemory(device->logicalDevice, vertexStaging.memory, nullptr);
+	}
+
+
 	void simplifyModel(vks::VulkanDevice* device, VkQueue transferQueue)
 	{
 		for (auto& node : model->linearNodes)
@@ -39,20 +162,23 @@ public:
 				simplifyMesh(*node->mesh);
 		}
 		this->device = device;
-		createVertexBuffer(device, transferQueue);
+		createVertexIndexBuffer(device, transferQueue);
 	}
 	void drawSimplifiedModel(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineLayout pipelineLayout, uint32_t bindImageSet)
 	{
 		const VkDeviceSize offsets[1] = { 0 };
 		vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertices.buffer, offsets);
-		vkCmdBindIndexBuffer(commandBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-		for (auto& prim : primitives)
-		{
-			if (renderFlags & vkglTF::RenderFlags::BindImages) {
-				vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageSet, 1, &prim.material.descriptorSet, 0, nullptr);
-			}
-			vkCmdDrawIndexed(commandBuffer, prim.indexCount, 1, prim.firstIndex, 0, 0);
-		}
+		//vkCmdBindIndexBuffer(commandBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+		//vkCmdDrawIndexed(commandBuffer, prim.indexCount, 1, prim.firstIndex, 0, 0);
+		vkCmdDraw(commandBuffer, vertices.count, 1, 0, 0);
+		//for (auto& prim : primitives)
+		//{
+		//	if (renderFlags & vkglTF::RenderFlags::BindImages) {
+		//		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageSet, 1, &prim.material.descriptorSet, 0, nullptr);
+		//	}
+		//	//vkCmdDrawIndexed(commandBuffer, prim.indexCount, 1, prim.firstIndex, 0, 0);
+		//	vkCmdDraw(commandBuffer, vertices.count, 1, 0, 0);
+		//}
 	}
 	void vkglTFPrimitiveToOpenMesh(MyMesh& mymesh, const vkglTF::Primitive& prim)
 	{
@@ -80,14 +206,27 @@ public:
 			mymesh.add_face(face_vhandles);
 		}
 	}
+
+	void vkglTFMeshToOpenMesh(MyMesh& mymesh, const vkglTF::Mesh& mesh);
+	const Graph buildTriangleGraph(const MyMesh & mesh) const;
+	void generateCluster(const Graph & triangleGraph);
+
+	const Graph buildClusterGraph(const MyMesh& mesh) const;
+	void generateClusterGroup(const Graph & clusterGraph);
+
+	void colorClusterGraph();
+	void colorClusterGroupGraph();
+
 	~MeshHandler() {
 		vkDestroyBuffer(device->logicalDevice, vertices.buffer, nullptr);
 		vkFreeMemory(device->logicalDevice, vertices.memory, nullptr);
-		vkDestroyBuffer(device->logicalDevice, indices.buffer, nullptr);
-		vkFreeMemory(device->logicalDevice, indices.memory, nullptr);
+		if (indices.count) {
+			vkDestroyBuffer(device->logicalDevice, indices.buffer, nullptr);
+			vkFreeMemory(device->logicalDevice, indices.memory, nullptr);
+		}
 	}
 private:
-	void createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue)
+	void createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue)
 	{
 		size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
 		size_t indexBufferSize = indexBuffer.size() * sizeof(uint32_t);

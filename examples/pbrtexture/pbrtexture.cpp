@@ -180,9 +180,10 @@ public:
 	{
 		const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 		models.skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		reducedModel.loadFromvkglTFModel(models.object);
-		reducedModel.simplifyModel(vulkanDevice, queue);
+		//models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		models.object.loadFromFile(getAssetPath() + "models/bunny.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
+		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
 		textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
 		textures.normalMap.loadFromFile(getAssetPath() + "models/cerberus/normal.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
@@ -274,7 +275,13 @@ public:
 		pipelineCI.pDynamicState = &dynamicState;
 		pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
 		pipelineCI.pStages = shaderStages.data();
-		pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({ vkglTF::VertexComponent::Position, vkglTF::VertexComponent::Normal, vkglTF::VertexComponent::UV, vkglTF::VertexComponent::Tangent });
+		pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({ 
+			vkglTF::VertexComponent::Position, 
+			vkglTF::VertexComponent::Normal, 
+			vkglTF::VertexComponent::UV, 
+			vkglTF::VertexComponent::Tangent,
+			vkglTF::VertexComponent::Joint0,
+			vkglTF::VertexComponent::Weight0});
 
 		// Skybox pipeline (background cube)
 		rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
@@ -283,8 +290,9 @@ public:
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.skybox));
 
 		// PBR pipeline
-		rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
-		rasterizationState.cullMode = VK_CULL_MODE_NONE;
+		rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+		//rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
+		//rasterizationState.cullMode = VK_CULL_MODE_NONE;
 		shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 		shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 		// Enable depth test and write
@@ -1327,6 +1335,7 @@ public:
 
 	void prepare()
 	{
+		enabledDeviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
 		VulkanExampleBase::prepare();
 		loadAssets();
 		generateBRDFLUT();

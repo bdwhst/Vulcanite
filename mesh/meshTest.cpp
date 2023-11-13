@@ -27,7 +27,7 @@ int main(){
     //    // Access and manipulate the face using fh
     //}
     //Mesh* mesh = new Mesh("../../assets/models/obj/dragon.obj");
-    Mesh * mesh = new Mesh("../../assets/models/teapot.gltf");
+    //Mesh * mesh = new Mesh("../../assets/models/teapot.gltf");
 
     // Stop the timer
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -42,9 +42,5 @@ int main(){
     // Calculate the duration in seconds
     duration = end_time - start_time;
     std::cout << "Time taken: " << duration.count() << " seconds" << std::endl;
-
-
-
-    delete mesh;
     return 0;
 }

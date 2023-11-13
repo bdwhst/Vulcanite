@@ -14,14 +14,7 @@
 #include "Graph.h"
 #include "metis.h"
 #include "utils.h"
-
-struct MyTraits : public OpenMesh::DefaultTraits
-{
-	VertexAttributes(OpenMesh::Attributes::Normal |
-		OpenMesh::Attributes::TexCoord2D);
-};
-typedef OpenMesh::TriMesh_ArrayKernelT<MyTraits> MyMesh;
-
+#include "Mesh.h"
 
 class MeshHandler {
 	vks::VulkanDevice* device;
@@ -218,11 +211,13 @@ public:
 	void colorClusterGroupGraph();
 
 	~MeshHandler() {
-		vkDestroyBuffer(device->logicalDevice, vertices.buffer, nullptr);
-		vkFreeMemory(device->logicalDevice, vertices.memory, nullptr);
-		if (indices.count) {
-			vkDestroyBuffer(device->logicalDevice, indices.buffer, nullptr);
-			vkFreeMemory(device->logicalDevice, indices.memory, nullptr);
+		if (device) {
+			vkDestroyBuffer(device->logicalDevice, vertices.buffer, nullptr);
+			vkFreeMemory(device->logicalDevice, vertices.memory, nullptr);
+			if (indices.count) {
+				vkDestroyBuffer(device->logicalDevice, indices.buffer, nullptr);
+				vkFreeMemory(device->logicalDevice, indices.memory, nullptr);
+			}
 		}
 	}
 private:

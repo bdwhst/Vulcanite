@@ -1,7 +1,9 @@
 set(headers
     "Cluster.h"
+    "ClusterGroup.h"
     "MeshHandler.h"
     "Mesh.h"
+    "NaniteMesh.h"
     "Graph.h"
     "utils.h"
 )
@@ -9,9 +11,12 @@ set(headers
 set(sources
     "meshTest.cpp"
     "Cluster.cpp"
-    "MeshHandler.cpp"
-    "Graph.cpp"
+    "ClusterGroup.cpp"
     "Mesh.cpp"
+    "MeshHandler.cpp"
+    "NaniteMesh.cpp"
+    "Graph.cpp"
+    "utils.cpp"
 )
 
 list(SORT headers)

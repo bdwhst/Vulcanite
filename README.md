@@ -130,3 +130,40 @@ It should be solvable without using recursive partition?
 - **Limitations**
 	- Not fixed size
 	- Unconnected mesh
+
+
+11.12
+
+- TODO
+	- [ ] Fix unconnected mesh issues?
+		- [ ] How to fix it?
+	- [ ] Build the whole cpu part pipeline
+
+Draft version of implementation
+```cpp
+struct Cluster{
+	std::map<int, int> neighborsAndCosts;
+	std::vector<uint32_t> triangles;
+};
+
+struct ClusterGroup{
+	std::map<int, int> neighborsAndCosts;
+	std::vector<uint32_t> boundaries;
+};
+
+struct Mesh{
+	std::vector<Cluster> clusters;
+	std::vector<ClusterGroup> clusterGroups;
+};
+
+struct NaniteMesh{
+	uint32_t lod_nums;
+	std::vector<Mesh> meshes;
+};
+```
+
+Steps
+- [ ] Implement `Mesh` class. Generate cluster/cluster group index for lod0
+- [ ] Implement `Cluster` & `ClusterGroup` class
+- [ ] Generate cluster/cluster group info for the rest of lods
+- [ ] Build DAG/BVH for nanite infos.

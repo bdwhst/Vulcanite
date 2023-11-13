@@ -1,6 +1,8 @@
 #pragma once
 #include <iostream>
 #include <cassert>
+#include <glm/glm.hpp>
+#include "Mesh.h"
 
 #define ASSERT(condition, message) \
     do { \
@@ -12,3 +14,5 @@
             std::abort(); \
         } \
     } while (0)
+
+void getTriangleAABB(const glm::vec3 & p0, const glm::vec3 & p1, const glm::vec3 & p2, glm::vec3 & pMin, glm::vec3 & pMax);

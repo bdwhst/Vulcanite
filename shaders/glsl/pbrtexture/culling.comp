@@ -1,0 +1,39 @@
+#version 450
+
+#define WORKGROUP_SIZE 32
+
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+struct Cluster
+{
+    vec3 pMin;
+    vec3 pMax;
+};
+
+
+layout(std140, set = 0, binding = 0) buffer ClustersIn {
+   Cluster indata[ ];
+};
+
+layout(std140, set = 0, binding = 1) buffer ClustersOut {
+   int outData[ ];
+};
+
+layout(std140, set = 0, binding = 2) buffer NumClusters {
+    uint vertexCount; 
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+} numclusters;
+
+layout(set = 0, binding = 3) uniform LastCamera {
+    mat4 view;
+    mat4 proj;
+} lastcamera;
+
+layout(set = 0, binding = 4) uniform sampler2D lastHZB;
+
+void main()
+{
+
+}

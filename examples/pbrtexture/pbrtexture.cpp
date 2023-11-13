@@ -33,7 +33,29 @@ public:
 		vks::Texture2D aoMap;
 		vks::Texture2D metallicMap;
 		vks::Texture2D roughnessMap;
+		vks::Texture2D hizbuffer;
 	} textures;
+
+	std::vector<VkImageView> hizImageViews;
+
+	VkDescriptorSetLayout hizComputeDescriptorSetLayout;
+	std::vector<VkDescriptorSet> hizComputeDescriptorSets;
+	VkPipelineLayout hizComputePipelineLayout;
+	VkPipeline hizComputePipeline;
+
+	VkDescriptorSetLayout depthCopyDescriptorSetLayout;
+	VkDescriptorSet depthCopyDescriptorSet;
+	VkPipelineLayout depthCopyPipelineLayout;
+	VkPipeline depthCopyPipeline;
+
+	VkDescriptorSetLayout debugQuadDescriptorSetLayout;
+	VkDescriptorSet debugQuadDescriptorSet;
+	VkPipelineLayout debugQuadPipelineLayout;
+	VkPipeline debugQuadPipeline;
+
+	VkSampler depthStencilSampler;
+
+	uint32_t workgroupX = 8, workgroupY = 8;
 
 	struct Meshes {
 		vkglTF::Model skybox;
@@ -167,10 +189,98 @@ public:
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 			//models.object.draw(drawCmdBuffers[i]);
 			reducedModel.drawSimplifiedModel(drawCmdBuffers[i], 0, nullptr, 1);
-
+			
 			drawUI(drawCmdBuffers[i]);
-
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
+
+
+			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
+			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
+			imageMemBarriers[0].image = depthStencil.image;
+			imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarriers[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			imageMemBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+			imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
+			imageMemBarriers[0].subresourceRange.levelCount = 1;
+			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
+			imageMemBarriers[0].subresourceRange.layerCount = 1;
+
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &depthCopyDescriptorSet, 0, 0);
+			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+
+			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
+			imageMemBarriers[0].image = depthStencil.image;
+			imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarriers[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+			imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
+			imageMemBarriers[0].subresourceRange.levelCount = 1;
+			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
+			imageMemBarriers[0].subresourceRange.layerCount = 1;
+
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+			
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
+			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
+			{
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &hizComputeDescriptorSets[j], 0, 0);
+				vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+				imageMemBarrier.image = textures.hizbuffer.image;
+				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+				imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				imageMemBarrier.subresourceRange.baseMipLevel = j+1;
+				imageMemBarrier.subresourceRange.levelCount = 1;
+				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+				imageMemBarrier.subresourceRange.layerCount = 1;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			}
+
+
+			VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			imageMemBarrier.image = textures.hizbuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			
+
+
+			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &debugQuadDescriptorSet, 0, NULL);
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
+			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+			vkCmdEndRenderPass(drawCmdBuffers[i]);
+
+			imageMemBarrier.image = textures.hizbuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
@@ -197,9 +307,13 @@ public:
 		// Descriptor Pool
 		std::vector<VkDescriptorPoolSize> poolSizes = {
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16)
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 * (textures.hizbuffer.mipLevels - 1) + 1),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
 		};
-		VkDescriptorPoolCreateInfo descriptorPoolInfo =	vks::initializers::descriptorPoolCreateInfo(poolSizes, 2);
+		VkDescriptorPoolCreateInfo descriptorPoolInfo =	vks::initializers::descriptorPoolCreateInfo(poolSizes, poolSizes.size());
+		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels - 2;
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 
 		// Descriptor set layout
@@ -215,8 +329,8 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 8),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
 		};
-		VkDescriptorSetLayoutCreateInfo descriptorLayout = 	vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayout, nullptr, &descriptorSetLayout));
+		VkDescriptorSetLayoutCreateInfo descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &descriptorSetLayout));
 
 		// Descriptor sets
 		VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayout, 1);
@@ -245,6 +359,70 @@ public:
 			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.environmentCube.descriptor),
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
+		// Hi-z building
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+		};
+
+		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &hizComputeDescriptorSetLayout));
+		for (int i = 0; i < textures.hizbuffer.mipLevels - 1; i++)
+		{
+			VkDescriptorSet descriptorSet;
+			VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &hizComputeDescriptorSetLayout, 1);
+			VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
+			//;
+			VkDescriptorImageInfo inputImageInfo = {};
+			inputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			inputImageInfo.imageView = hizImageViews[i];
+			VkDescriptorImageInfo outputImageInfo = {};
+			outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			outputImageInfo.imageView = hizImageViews[i + 1];
+			std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
+				vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 0, &inputImageInfo),
+				vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, &outputImageInfo)
+			};
+			vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+			hizComputeDescriptorSets.emplace_back(descriptorSet);
+		}
+
+		// Draw quad
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+		};
+		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &debugQuadDescriptorSetLayout));
+		allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &debugQuadDescriptorSetLayout, 1);
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &debugQuadDescriptorSet));
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(debugQuadDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &textures.hizbuffer.descriptor)
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+		
+		// Depth Copy
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1)
+		};
+		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &depthCopyDescriptorSetLayout));
+		allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &depthCopyDescriptorSetLayout, 1);
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &depthCopyDescriptorSet));
+		VkDescriptorImageInfo depthImageInfo = {};
+		depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		depthImageInfo.imageView = depthStencil.view;
+		depthImageInfo.sampler = depthStencilSampler;
+		VkDescriptorImageInfo outputImageInfo = {};
+		outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		outputImageInfo.imageView = hizImageViews[0];
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(depthCopyDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &depthImageInfo),
+			vks::initializers::writeDescriptorSet(depthCopyDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, &outputImageInfo)
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
 	}
 
 	void preparePipelines()
@@ -299,6 +477,55 @@ public:
 		depthStencilState.depthWriteEnable = VK_TRUE;
 		depthStencilState.depthTestEnable = VK_TRUE;
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbr));
+
+		{
+			// Debug Draw Quad pipeline
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&debugQuadDescriptorSetLayout, 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &debugQuadPipelineLayout));
+			pipelineCI.layout = debugQuadPipelineLayout;
+			depthStencilState.depthWriteEnable = VK_FALSE;
+			depthStencilState.depthTestEnable = VK_FALSE;
+			VkPipelineVertexInputStateCreateInfo vertexInputStateCI = {};
+			vertexInputStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			/*vertexInputStateCI.vertexBindingDescriptionCount = 0;
+			vertexInputStateCI.pVertexBindingDescriptions = nullptr;
+			vertexInputStateCI.vertexAttributeDescriptionCount = 0;
+			vertexInputStateCI.pVertexAttributeDescriptions = nullptr;*/
+			pipelineCI.pVertexInputState = &vertexInputStateCI;
+			rasterizationState.cullMode = VK_CULL_MODE_NONE;
+			shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/debugquad.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+			shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/debugquad.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &debugQuadPipeline));
+		}
+
+		{
+			// Hi-Z Buffer build pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/genhiz.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&hizComputeDescriptorSetLayout, 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &hizComputePipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = hizComputePipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &hizComputePipeline));
+		}
+
+		{
+			// Depth copy pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/depthcopy.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&depthCopyDescriptorSetLayout, 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &depthCopyPipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = depthCopyPipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &depthCopyPipeline));
+		}
+
 	}
 
 	// Generate a BRDF integration map used as a look-up-table (stores roughness / NdotV)
@@ -1264,6 +1491,95 @@ public:
 		std::cout << "Generating pre-filtered enivornment cube with " << numMips << " mip levels took " << tDiff << " ms" << std::endl;
 	}
 
+	void createHiZBuffer()
+	{
+		uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
+		textures.hizbuffer.mipLevels = mipLevels;
+		const VkFormat format = VK_FORMAT_R32_SFLOAT;
+		VkImageCreateInfo imageCI = vks::initializers::imageCreateInfo();
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = format;
+		imageCI.extent.width = width;
+		imageCI.extent.height = height;
+		imageCI.extent.depth = 1;
+		imageCI.mipLevels = mipLevels;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &textures.hizbuffer.image));
+		
+		VkMemoryAllocateInfo memAlloc = vks::initializers::memoryAllocateInfo();
+		VkMemoryRequirements memReqs;
+		vkGetImageMemoryRequirements(device, textures.hizbuffer.image, &memReqs);
+		memAlloc.allocationSize = memReqs.size;
+		memAlloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAlloc, nullptr, &textures.hizbuffer.deviceMemory));
+		VK_CHECK_RESULT(vkBindImageMemory(device, textures.hizbuffer.image, textures.hizbuffer.deviceMemory, 0));
+
+		// Image view
+		VkImageViewCreateInfo viewCI = vks::initializers::imageViewCreateInfo();
+		viewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		viewCI.format = format;
+		viewCI.subresourceRange = {};
+		viewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		viewCI.subresourceRange.levelCount = mipLevels;
+		viewCI.subresourceRange.layerCount = 1;
+		viewCI.image = textures.hizbuffer.image;
+		VK_CHECK_RESULT(vkCreateImageView(device, &viewCI, nullptr, &textures.hizbuffer.view));
+		// Sampler
+		VkSamplerCreateInfo samplerCI = vks::initializers::samplerCreateInfo();
+		samplerCI.magFilter = VK_FILTER_LINEAR;
+		samplerCI.minFilter = VK_FILTER_LINEAR;
+		samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.minLod = 0.0f;
+		samplerCI.maxLod = static_cast<float>(mipLevels);
+		samplerCI.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+		VK_CHECK_RESULT(vkCreateSampler(device, &samplerCI, nullptr, &textures.hizbuffer.sampler));
+
+		textures.hizbuffer.descriptor.imageView = textures.hizbuffer.view;
+		textures.hizbuffer.descriptor.sampler = textures.hizbuffer.sampler;
+		textures.hizbuffer.descriptor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		textures.hizbuffer.device = vulkanDevice;
+
+
+		for (int i = 0; i < mipLevels; i++)
+		{
+			VkImageView iView;
+			VkImageViewCreateInfo viewCI = vks::initializers::imageViewCreateInfo();
+			viewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			viewCI.format = format;
+			viewCI.subresourceRange = {};
+			viewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			viewCI.subresourceRange.baseMipLevel = i;
+			viewCI.subresourceRange.levelCount = 1;
+			viewCI.subresourceRange.layerCount = 1;
+			viewCI.image = textures.hizbuffer.image;
+			VK_CHECK_RESULT(vkCreateImageView(device, &viewCI, nullptr, &iView));
+			hizImageViews.emplace_back(iView);
+		}
+
+		VkCommandBuffer cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkImageSubresourceRange subresourceRange = {};
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		subresourceRange.baseMipLevel = 0;
+		subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			textures.hizbuffer.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_GENERAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+	}
+
 	// Prepare and initialize uniform buffer containing shader uniforms
 	void prepareUniformBuffers()
 	{
@@ -1333,6 +1649,72 @@ public:
 		VulkanExampleBase::submitFrame();
 	}
 
+	void setupDepthStencil()
+	{
+		VkImageCreateInfo imageCI{};
+		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = depthFormat;
+		imageCI.extent = { width, height, 1 };
+		imageCI.mipLevels = 1;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &depthStencil.image));
+		VkMemoryRequirements memReqs{};
+		vkGetImageMemoryRequirements(device, depthStencil.image, &memReqs);
+
+		VkMemoryAllocateInfo memAllloc{};
+		memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAllloc.allocationSize = memReqs.size;
+		memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &depthStencil.mem));
+		VK_CHECK_RESULT(vkBindImageMemory(device, depthStencil.image, depthStencil.mem, 0));
+
+		VkImageViewCreateInfo imageViewCI{};
+		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCI.image = depthStencil.image;
+		imageViewCI.format = depthFormat;
+		imageViewCI.subresourceRange.baseMipLevel = 0;
+		imageViewCI.subresourceRange.levelCount = 1;
+		imageViewCI.subresourceRange.baseArrayLayer = 0;
+		imageViewCI.subresourceRange.layerCount = 1;
+		imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		// Stencil aspect should only be set on depth + stencil formats (VK_FORMAT_D16_UNORM_S8_UINT..VK_FORMAT_D32_SFLOAT_S8_UINT
+		/*if (depthFormat >= VK_FORMAT_D16_UNORM_S8_UINT) {
+			imageViewCI.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		}*/
+		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &depthStencil.view));
+
+		VkSamplerCreateInfo samplerCI = vks::initializers::samplerCreateInfo();
+		samplerCI.magFilter = VK_FILTER_NEAREST;
+		samplerCI.minFilter = VK_FILTER_NEAREST;
+		samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+		VK_CHECK_RESULT(vkCreateSampler(device, &samplerCI, nullptr, &depthStencilSampler));
+
+		VkCommandBuffer cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkImageSubresourceRange subresourceRange = {};
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+		subresourceRange.levelCount = 1;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			depthStencil.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+	}
+
 	void prepare()
 	{
 		enabledDeviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
@@ -1341,6 +1723,7 @@ public:
 		generateBRDFLUT();
 		generateIrradianceCube();
 		generatePrefilteredCube();
+		createHiZBuffer();
 		prepareUniformBuffers();
 		setupDescriptors();
 		preparePipelines();

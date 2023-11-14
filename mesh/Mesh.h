@@ -46,7 +46,8 @@ public:
 
 	MyMesh mesh;
 
-	std::vector<uint32_t> triangleIndicesSortedByClusterIdx;
+	std::vector<uint32_t> triangleIndicesSortedByClusterIdx; // face_idx sort by cluster
+	std::vector<uint32_t> triangleVertexIndicesSortedByClusterIdx; // (vert1, vert2, vert3) sort by cluster
 
 	Graph triangleGraph;
 	int clusterNum;
@@ -77,7 +78,6 @@ public:
 	void initVertexBuffer();
 	void createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
 	void draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineLayout pipelineLayout, uint32_t bindImageSet);
-private:
 	std::vector<glm::vec3> positions;
 
 	vks::VulkanDevice* device;

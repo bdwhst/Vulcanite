@@ -6,7 +6,8 @@
 #include "Mesh.h"
 
 struct NaniteMesh {
-	uint32_t lodNums;
+	uint32_t lodNums = 0;
+	glm::mat4 modelMatrix;
 	std::vector<Mesh> meshes;
 
 	/************ Load Mesh *************/
@@ -40,3 +41,7 @@ struct NaniteMesh {
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
 };
+
+void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes);
+
+void packNaniteMeshesToIndexBuffer(const std::vector<NaniteMesh>& naniteMeshes, std::vector<uint32_t>& indexBuffer);

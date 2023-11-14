@@ -51,6 +51,18 @@ void Mesh::generateCluster()
             return triangleClusterIndex[a] < triangleClusterIndex[b];
         });
 
+    triangleVertexIndicesSortedByClusterIdx.resize(mesh.n_faces() * 3);
+    for (const auto triangleIndex: triangleIndicesSortedByClusterIdx)
+    {
+		auto face = mesh.face_handle(triangleIndex);
+		auto fv_it = mesh.fv_iter(face);
+		triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3] = fv_it->idx();
+        ++fv_it;
+        triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3 + 1] = fv_it->idx();
+        ++fv_it;
+        triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3 + 2] = fv_it->idx();
+	}
+
     // Init Clusters
     clusters.resize(clusterNum);
     for (MyMesh::FaceIter face_it = mesh.faces_begin(); face_it != mesh.faces_end(); ++face_it) {
@@ -296,7 +308,7 @@ void Mesh::initVertexBuffer(){
 
             int clusterGroupId = clusterGroupIndex[clusterId];
             // Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
-            v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
+            v.weight0 = glm::vec4(nodeColors[face.idx() % nodeColors.size()], clusterGroupId);
             vertexBuffer.push_back(v);
         }
     }

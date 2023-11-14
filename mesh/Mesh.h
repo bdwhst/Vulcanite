@@ -41,9 +41,12 @@ public:
 	void colorClusterGraph();
 	void colorClusterGroupGraph();
 
-	void simplifyMesh();
+	void lockClusterGroupBoundaries(MyMesh& mymesh);
+	void simplifyMesh(MyMesh& mymesh);
 
 	MyMesh mesh;
+
+	std::vector<uint32_t> triangleIndicesSortedByClusterIdx;
 
 	Graph triangleGraph;
 	int clusterNum;
@@ -54,10 +57,11 @@ public:
 
 	Graph clusterGraph;
 	int clusterGroupNum;
-	const int targetClusterGroupSize = 16;
+	const int targetClusterGroupSize = 15;
 	std::vector<idx_t> clusterGroupIndex;
 	std::unordered_map<int, int> clusterGroupColorAssignment;
-	std::vector<glm::vec3> clusterGroupColor;
+	std::vector<ClusterGroup> clusterGroups;
+
 	const std::vector<glm::vec3> nodeColors =
 	{
 		glm::vec3(1.0f, 0.0f, 0.0f), // red
@@ -70,28 +74,7 @@ public:
 		glm::vec3(0.5f, 1.0f, 0.0f), // lime
 	};
 
-	void initVertexBuffer()
-	{
-		for (MyMesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end(); ++f_it) {
-			MyMesh::FaceHandle face = *f_it;
-			for (MyMesh::FaceVertexIter fv_it = mesh.cfv_iter(face); fv_it.is_valid(); ++fv_it) {
-				MyMesh::VertexHandle vertex = *fv_it;
-				vkglTF::Vertex v;
-				v.pos = glm::vec3(mesh.point(vertex)[0], mesh.point(vertex)[1], mesh.point(vertex)[2]);
-				v.normal = glm::vec3(mesh.normal(vertex)[0], mesh.normal(vertex)[1], mesh.normal(vertex)[2]);
-				v.uv = glm::vec2(mesh.texcoord2D(vertex)[0], mesh.texcoord2D(vertex)[1]);
-				// TODO: v.tangent not assigned. How to assign?
-				// Assign clusterId and clusterGroupId
-				int clusterId = triangleClusterIndex[face.idx()];
-				v.joint0 = glm::vec4(nodeColors[clusterColorAssignment[clusterId]], clusterId);
-
-				int clusterGroupId = clusterGroupIndex[clusterId];
-				// Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
-				v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
-				vertexBuffer.push_back(v);
-			}
-		}
-	}
+	void initVertexBuffer();
 	void createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
 	void draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineLayout pipelineLayout, uint32_t bindImageSet);
 private:

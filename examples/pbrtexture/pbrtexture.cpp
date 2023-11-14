@@ -242,7 +242,7 @@ public:
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
-			/*
+
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -256,68 +256,68 @@ public:
 			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
 
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+			// vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &depthCopyDescriptorSet, 0, 0);
-			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			// vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
+			// vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &depthCopyDescriptorSet, 0, 0);
+			// vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
-			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
-			imageMemBarriers[0].image = depthStencil.image;
-			imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			imageMemBarriers[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-			imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
-			imageMemBarriers[0].subresourceRange.levelCount = 1;
-			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
-			imageMemBarriers[0].subresourceRange.layerCount = 1;
+			// imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
+			// imageMemBarriers[0].image = depthStencil.image;
+			// imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			// imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			// imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			// imageMemBarriers[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			// imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+			// imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
+			// imageMemBarriers[0].subresourceRange.levelCount = 1;
+			// imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
+			// imageMemBarriers[0].subresourceRange.layerCount = 1;
 
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+			// vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 			
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
-			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
-			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &hizComputeDescriptorSets[j], 0, 0);
-				vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
-				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
-				imageMemBarrier.image = textures.hizbuffer.image;
-				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-				imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-				imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-				imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				imageMemBarrier.subresourceRange.baseMipLevel = j+1;
-				imageMemBarrier.subresourceRange.levelCount = 1;
-				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-				imageMemBarrier.subresourceRange.layerCount = 1;
-				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-			}
+			// vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
+			// for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
+			// {
+			// 	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &hizComputeDescriptorSets[j], 0, 0);
+			// 	vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			// 	VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			// 	imageMemBarrier.image = textures.hizbuffer.image;
+			// 	imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			// 	imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			// 	imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			// 	imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			// 	imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			// 	imageMemBarrier.subresourceRange.baseMipLevel = j+1;
+			// 	imageMemBarrier.subresourceRange.levelCount = 1;
+			// 	imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			// 	imageMemBarrier.subresourceRange.layerCount = 1;
+			// 	vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			// }
 
 
-			VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
-			imageMemBarrier.image = textures.hizbuffer.image;
-			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			imageMemBarrier.subresourceRange.baseMipLevel = 0;
-			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
-			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			// VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			// imageMemBarrier.image = textures.hizbuffer.image;
+			// imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			// imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			// imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			// imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			// imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			// imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			// imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			// imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			// imageMemBarrier.subresourceRange.layerCount = 1;
+			// vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			
 
 
-			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &debugQuadDescriptorSet, 0, NULL);
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
-			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
-			vkCmdEndRenderPass(drawCmdBuffers[i]);
+			// vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			// vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+			// vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+			// vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &debugQuadDescriptorSet, 0, NULL);
+			// vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
+			// vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+			// vkCmdEndRenderPass(drawCmdBuffers[i]);
 
 			imageMemBarrier.image = textures.hizbuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

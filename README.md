@@ -163,7 +163,9 @@ struct NaniteMesh{
 ```
 
 Steps
-- [ ] Implement `Mesh` class. Generate cluster/cluster group index for lod0
-- [ ] Implement `Cluster` & `ClusterGroup` class
-- [ ] Generate cluster/cluster group info for the rest of lods
+- [x] Implement `Mesh` class. Generate cluster/cluster group index for lod0
+- [x] Implement `Cluster` & `ClusterGroup` class
+- [x] Generate cluster/cluster group info for the rest of lods
+- [ ] Lock edges
+- [ ] Consider refreshing cmd buffer to see clustering of each lod
 - [ ] Build DAG/BVH for nanite infos.

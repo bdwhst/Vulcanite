@@ -53,16 +53,16 @@ void NaniteMesh::vkglTFMeshToOpenMesh(MyMesh& mymesh, const vkglTF::Mesh& mesh) 
 }
 
 void NaniteMesh::generateNaniteInfo() {
-	Mesh meshLOD;
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
+	int clusterGroupNum = -1;
+	int lodLevel = 0;
+	int target = 2;
 	do
 	{
 		// For each lod mesh
+		Mesh meshLOD;
 		meshLOD.mesh = mymesh;
-		//mesh.simplifyMesh();
-		//mesh.simplifyMesh();
-		//mesh.simplifyMesh();
 		meshLOD.buildTriangleGraph();
 		meshLOD.generateCluster();
 		// Generate cluster group by partitioning cluster graph
@@ -72,7 +72,19 @@ void NaniteMesh::generateNaniteInfo() {
 		meshes.push_back(meshLOD);
 
 		// Mesh simplification
-		// Need to lock edge
+		// TODO: Need to lock edge
+		meshLOD.lockClusterGroupBoundaries(mymesh);
+		meshLOD.simplifyMesh(mymesh); 
+		clusterGroupNum = meshLOD.clusterGroupNum;
+		std::cout << "LOD " << lodLevel++ << " generated" << std::endl;
+
 	} while (false); // Only do one time for testing
-	//} while (mesh.clusterGroupIndex.size() == 1); // Quit when there is only one cluster group
+	//std::string output_filename = "output.obj";
+
+	//// Export the mesh to the specified file
+	//if (!OpenMesh::IO::write_mesh(mymesh, output_filename)) {
+	//	std::cerr << "Error exporting mesh to " << output_filename << std::endl;
+	//}
+	//} while (false); // Only do one time for testing
+	//} while (clusterGroupNum != 1); 
 }

@@ -48,7 +48,7 @@ void Mesh::generateCluster()
     for (MyMesh::FaceIter face_it = mesh.faces_begin(); face_it != mesh.faces_end(); ++face_it) {
         MyMesh::FaceHandle fh = *face_it;
         auto clusterIdx = triangleClusterIndex[fh.idx()];
-        auto cluster = clusters[clusterIdx];
+        auto & cluster = clusters[clusterIdx];
         cluster.triangleIndices.push_back(fh.idx());
         glm::vec3 pMin, pMax;
         glm::vec3 p0, p1, p2;

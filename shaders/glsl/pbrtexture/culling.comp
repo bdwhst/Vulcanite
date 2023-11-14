@@ -8,6 +8,8 @@ struct Cluster
 {
     vec3 pMin;
     vec3 pMax;
+    uint triangleStart;
+    uint triangleEnd;
 };
 
 
@@ -15,25 +17,53 @@ layout(std140, set = 0, binding = 0) buffer ClustersIn {
    Cluster indata[ ];
 };
 
-layout(std140, set = 0, binding = 1) buffer ClustersOut {
-   int outData[ ];
+layout(std140, set = 0, binding = 1) buffer TrianglesIn {
+   int inTriangles[ ];
 };
 
-layout(std140, set = 0, binding = 2) buffer NumClusters {
+layout(std140, set = 0, binding = 2) buffer TrianglesOut {
+   int outTriangles[ ];
+};
+
+layout(std140, set = 0, binding = 3) buffer NumVertices {
     uint vertexCount; 
     uint instanceCount;
     uint firstVertex;
     uint firstInstance;
-} numclusters;
+} numVertices;
 
-layout(set = 0, binding = 3) uniform LastCamera {
-    mat4 view;
-    mat4 proj;
-} lastcamera;
+layout(set = 0, binding = 4) uniform UBOMats {
+    mat4 model; //TODO: per cluster model matrix
+    mat4 lastView;
+    mat4 lastProj;
+} ubomats;
 
-layout(set = 0, binding = 4) uniform sampler2D lastHZB;
+layout(set = 0, binding = 5) uniform sampler2D lastHZB;
+
+layout(push_constant) uniform PushConstants {
+    int numClusters;
+} pcs;
 
 void main()
 {
+    uint index = gl_GlobalInvocationID.x;
+    
+    if(index >= pcs.numClusters) return;
 
+    if (index == 0) {
+        numVertices.vertexCount = 0;
+	}
+    barrier();
+
+    bool culled = false;
+
+    if(!culled)
+    {
+        uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
+        uint nIdx = atomicAdd(numVertices.vertexCount, totalVertices);
+        for(int i=0;i<totalVertices;i++)
+        {
+            outTriangles[nIdx+i] = inTriangles[nIdx+i];
+        }
+    }
 }

@@ -54,6 +54,13 @@ public:
 	VkPipelineLayout debugQuadPipelineLayout;
 	VkPipeline debugQuadPipeline;
 
+	VkDescriptorSetLayout cullingDescriptorSetLayout;
+	VkDescriptorSet cullingDescriptorSet;
+	VkPipelineLayout cullingPipelineLayout;
+	VkPipeline cullingPipeline;
+
+	
+
 	VkSampler depthStencilSampler;
 
 	uint32_t workgroupX = 8, workgroupY = 8;
@@ -79,6 +86,20 @@ public:
 		glm::vec3 camPos;
 	} uboMatrices;
 
+	struct UBOCullingMatrices {
+		glm::mat4 model;
+		glm::mat4 lastView;
+		glm::mat4 lastProj;
+	}uboCullingMatrices;
+
+	struct DrawIndexedIndirect {
+		uint32_t indexCount;
+		uint32_t instanceCount;
+		uint32_t firstIndex;
+		uint32_t vertexOffset;
+		uint32_t firstInstance;
+	}drawIndexedIndirect;
+
 	struct UBOParams {
 		glm::vec4 lights[4];
 		float exposure = 4.5f;
@@ -94,6 +115,23 @@ public:
 		VkDescriptorSet object;
 		VkDescriptorSet skybox;
 	} descriptorSets;
+
+	struct ClusterInfo
+	{
+		glm::vec3 pMin;
+		glm::vec3 pMax;
+		uint triangleStart;
+		uint triangleEnd;
+	};
+
+	struct CullingPushConstants {
+		int numClusters;
+	} cullingPushConstants;
+
+	vks::Buffer culledIndicesBuffer;
+	vks::Buffer clustersInfoBuffer;
+	vks::Buffer cullingUniformBuffer;
+	vks::Buffer drawIndexedIndirectBuffer;
 
 	VkPipelineLayout pipelineLayout;
 	VkDescriptorSetLayout descriptorSetLayout;
@@ -186,17 +224,25 @@ public:
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
 
+			
+
 			// Objects
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.object, 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 			//models.object.draw(drawCmdBuffers[i]);
+
+			//TODO: support multiple primitives in a model
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			vkCmdBindIndexBuffer(drawCmdBuffers[i], models.object.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+
 			//reducedModel.drawSimplifiedModel(drawCmdBuffers[i], 0, nullptr, 1);
-			naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
+			//naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
 
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
-
+			/*
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -284,7 +330,7 @@ public:
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-
+			*/
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
 	}
@@ -317,8 +363,12 @@ public:
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 * (textures.hizbuffer.mipLevels - 1) + 1),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1)
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
 		};
+		//TODO: calculate the exact maxsets here
 		VkDescriptorPoolCreateInfo descriptorPoolInfo =	vks::initializers::descriptorPoolCreateInfo(poolSizes, poolSizes.size());
 		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels - 2;
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
@@ -430,6 +480,35 @@ public:
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
 
+		//Culling
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5)
+		};
+		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
+		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &cullingDescriptorSetLayout));
+		allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &cullingDescriptorSetLayout, 1);
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &cullingDescriptorSet));
+		clustersInfoBuffer.setupDescriptor();
+		culledIndicesBuffer.setupDescriptor();
+		drawIndexedIndirectBuffer.setupDescriptor();
+		cullingUniformBuffer.setupDescriptor();
+		VkDescriptorBufferInfo inputIndicesInfo{};
+		inputIndicesInfo.buffer = models.object.indices.buffer;
+		inputIndicesInfo.range = VK_WHOLE_SIZE;
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &clustersInfoBuffer.descriptor),
+			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &inputIndicesInfo),
+			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, &culledIndicesBuffer.descriptor),
+			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3, &drawIndexedIndirectBuffer.descriptor),
+			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4, &cullingUniformBuffer.descriptor),
+			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.hizbuffer.descriptor),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
 	}
 
 	void preparePipelines()
@@ -533,6 +612,23 @@ public:
 			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &depthCopyPipeline));
 		}
 
+		{
+			// Culling pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/culling.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			VkPushConstantRange push_constant{};
+			push_constant.size=sizeof(CullingPushConstants);
+			push_constant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&cullingDescriptorSetLayout, 1);
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &cullingPipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = cullingPipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &cullingPipeline));
+		}
 	}
 
 	// Generate a BRDF integration map used as a look-up-table (stores roughness / NdotV)
@@ -1498,6 +1594,82 @@ public:
 		std::cout << "Generating pre-filtered enivornment cube with " << numMips << " mip levels took " << tDiff << " ms" << std::endl;
 	}
 
+	void createCullingBuffers()
+	{
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			models.object.indices.count,
+			&culledIndicesBuffer.buffer,
+			&culledIndicesBuffer.memory,
+			nullptr));
+		std::vector<ClusterInfo> clusterinfos;
+		for (auto& c:naniteMesh.meshes[0].clusters)
+		{
+			ClusterInfo ci;
+			ci.pMin = c.pMin;
+			ci.pMax = c.pMax;
+			//ci.triangleStart = ;
+			clusterinfos.emplace_back(ci);
+		}
+
+		vks::Buffer clusterStaging;
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			clusterinfos.size() * sizeof(ClusterInfo),
+			&clusterStaging.buffer,
+			&clusterStaging.memory,
+			clusterinfos.data()));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			clusterinfos.size()*sizeof(ClusterInfo),
+			&clustersInfoBuffer.buffer,
+			&clustersInfoBuffer.memory,
+			nullptr));
+		VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkBufferCopy copyRegion = {};
+
+		copyRegion.size = clusterinfos.size() * sizeof(ClusterInfo);
+		vkCmdCopyBuffer(copyCmd, clusterStaging.buffer, clustersInfoBuffer.buffer, 1, &copyRegion);
+
+		vulkanDevice->flushCommandBuffer(copyCmd, queue, true);//TODO: get transfer queue here
+
+		vkDestroyBuffer(vulkanDevice->logicalDevice, clusterStaging.buffer, nullptr);
+		vkFreeMemory(vulkanDevice->logicalDevice, clusterStaging.memory, nullptr);
+
+
+		uboCullingMatrices.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));//TODO: precompute model transformation in bounding box compute
+		uboCullingMatrices.lastView = camera.matrices.view;
+		uboCullingMatrices.lastProj = camera.matrices.perspective;
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			sizeof(UBOCullingMatrices),
+			&cullingUniformBuffer.buffer,
+			&cullingUniformBuffer.memory,
+			&uboCullingMatrices));
+
+		drawIndexedIndirect.firstIndex = 0;
+		drawIndexedIndirect.firstInstance = 0;
+		drawIndexedIndirect.indexCount = models.object.indexBuffer.size();
+		drawIndexedIndirect.instanceCount = 1;
+		drawIndexedIndirect.vertexOffset = 0;
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			sizeof(DrawIndexedIndirect),
+			&drawIndexedIndirectBuffer.buffer,
+			&drawIndexedIndirectBuffer.memory,
+			&drawIndexedIndirect));
+	}
+
 	void createHiZBuffer()
 	{
 		uint32_t mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
@@ -1730,6 +1902,7 @@ public:
 		generateBRDFLUT();
 		generateIrradianceCube();
 		generatePrefilteredCube();
+		createCullingBuffers();
 		createHiZBuffer();
 		prepareUniformBuffers();
 		setupDescriptors();

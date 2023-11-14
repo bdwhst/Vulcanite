@@ -14,7 +14,7 @@
 
 VkDescriptorSetLayout vkglTF::descriptorSetLayoutImage = VK_NULL_HANDLE;
 VkDescriptorSetLayout vkglTF::descriptorSetLayoutUbo = VK_NULL_HANDLE;
-VkMemoryPropertyFlags vkglTF::memoryPropertyFlags = 0;
+VkMemoryPropertyFlags vkglTF::memoryPropertyFlags = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
 uint32_t vkglTF::descriptorBindingFlags = vkglTF::DescriptorBindingFlags::ImageBaseColor;
 
 /*

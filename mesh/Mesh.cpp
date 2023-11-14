@@ -43,6 +43,14 @@ void Mesh::generateCluster()
     free(tpwgts);
     ASSERT(res, "METIS_PartGraphKway failed");
 
+    triangleIndicesSortedByClusterIdx.resize(mesh.n_faces());
+    for (size_t i = 0; i < mesh.n_faces(); i++)
+        triangleIndicesSortedByClusterIdx[i] = i;
+
+    std::sort(triangleIndicesSortedByClusterIdx.begin(), triangleIndicesSortedByClusterIdx.end(), [&](uint32_t a, uint32_t b) {
+            return triangleClusterIndex[a] < triangleClusterIndex[b];
+        });
+
     // Init Clusters
     clusters.resize(clusterNum);
     for (MyMesh::FaceIter face_it = mesh.faces_begin(); face_it != mesh.faces_end(); ++face_it) {
@@ -148,29 +156,40 @@ void Mesh::colorClusterGraph()
     }
 }
 
-void Mesh::simplifyMesh()
+void Mesh::lockClusterGroupBoundaries(MyMesh& mymesh)
 {
-    OpenMesh::Decimater::DecimaterT<MyMesh> decimater(mesh);
+    for (const auto & clusterGroup: clusterGroups)
+    {
+        for (const auto boundaryIndex : clusterGroup.boundaryIndices) 
+        {
+            mymesh.status(mymesh.vertex_handle(boundaryIndex)).set_locked(true);
+        }
+    }
+}
+
+void Mesh::simplifyMesh(MyMesh & mymesh)
+{
+    OpenMesh::Decimater::DecimaterT<MyMesh> decimater(mymesh);
     OpenMesh::Decimater::ModQuadricT<MyMesh>::Handle hModQuadric;
     decimater.add(hModQuadric);
     decimater.module(hModQuadric).set_binary(false);
 
     decimater.initialize();
 
-    for (auto he_it = mesh.halfedges_begin(); he_it != mesh.halfedges_end(); ++he_it)
-        if (mesh.is_boundary(*he_it)) {
-            mesh.status(mesh.to_vertex_handle(*he_it)).set_locked(true);
-            mesh.status(mesh.from_vertex_handle(*he_it)).set_locked(true);
+    for (auto he_it = mymesh.halfedges_begin(); he_it != mymesh.halfedges_end(); ++he_it)
+        if (mymesh.is_boundary(*he_it)) {
+            mymesh.status(mymesh.to_vertex_handle(*he_it)).set_locked(true);
+            mymesh.status(mymesh.from_vertex_handle(*he_it)).set_locked(true);
         }
 
-    size_t original_faces = mesh.n_faces();
+    size_t original_faces = mymesh.n_faces();
     std::cout << "NUM FACES BEFORE: " << original_faces << std::endl;
     double percentage = 0.2;
     size_t target_faces = static_cast<size_t>(original_faces * percentage);
 
     decimater.decimate_to_faces(0, target_faces);
-    mesh.garbage_collection();
-    size_t actual_faces = mesh.n_faces();
+    mymesh.garbage_collection();
+    size_t actual_faces = mymesh.n_faces();
     std::cout << "NUM FACES AFTER: " << actual_faces << std::endl;
 }
 
@@ -184,6 +203,16 @@ void Mesh::generateClusterGroup()
     real_t targetVertexWeight = (real_t)clusterMetisGraph.nvtxs / targetClusterGroupSize;
     idx_t ncon = 1;
     clusterGroupNum = clusterMetisGraph.nvtxs / targetClusterGroupSize;
+    clusterGroups.resize(clusterGroupNum);
+    if (clusterGroupNum == 1) { // Should quit now
+        for (size_t i = 0; i < clusterMetisGraph.nvtxs; i++)
+        {
+            clusterGroupIndex[i] = 0;
+            clusterGroups[0].clusterIndices.push_back(i);
+        }
+        return;
+    }
+    
     int clusterGroupSize = std::min(targetClusterGroupSize, clusterMetisGraph.nvtxs);
 
     real_t* tpwgts = (real_t*)malloc(ncon * clusterGroupNum * sizeof(real_t));
@@ -198,17 +227,79 @@ void Mesh::generateClusterGroup()
     auto res = METIS_PartGraphKway(&clusterMetisGraph.nvtxs, &ncon, clusterMetisGraph.xadj.data(), clusterMetisGraph.adjncy.data(), NULL, NULL, clusterMetisGraph.adjwgt.data(), &clusterGroupNum, tpwgts, NULL, options, &objVal, clusterGroupIndex.data());
     free(tpwgts);
     ASSERT(res, "METIS_PartGraphKway failed");
-
-    for (size_t i = 0; i < clusterGroupNum; i++)
-    {
-        std::cout << "Cluster Group id: " << i << " size: " << std::count(clusterGroupIndex.begin(), clusterGroupIndex.end(), i) << std::endl;
-    }
     
-    for (size_t i = 0; i < clusterGroupIndex.size(); i++)
+    for (size_t clusterIdx = 0; clusterIdx < clusterNum; clusterIdx++)
     {
-        std::cout << "index: " << i << " clusterGroupIndex[i]: " << clusterGroupIndex[i] << std::endl;
+        auto cluster = clusters[clusterIdx];
+        auto clusterGroupIdx = clusterGroupIndex[clusterIdx];
+
+        cluster.clusterGroupIndex = clusterGroupIdx;
+        clusterGroups[clusterGroupIdx].clusterIndices.push_back(clusterIdx);
     }
 
+    // Find the boundary of each cluster group
+
+    for (const MyMesh::EdgeHandle& edge : mesh.edges()) {
+        MyMesh::HalfedgeHandle heh = mesh.halfedge_handle(edge, 0);
+        MyMesh::FaceHandle fh = mesh.face_handle(heh);
+        MyMesh::FaceHandle fh2 = mesh.opposite_face_handle(heh);
+        if (fh.idx() < 0 || fh2.idx() < 0) continue;
+        auto clusterIdx1 = triangleClusterIndex[fh.idx()];
+        auto clusterIdx2 = triangleClusterIndex[fh2.idx()];
+        auto clusterGroupIdx1 = clusterGroupIndex[clusterIdx1];
+        auto clusterGroupIdx2 = clusterGroupIndex[clusterIdx2];
+        if (clusterGroupIdx1 != clusterGroupIdx2) {
+            auto vh1 = mesh.to_vertex_handle(heh);
+            auto vh2 = mesh.to_vertex_handle(mesh.opposite_halfedge_handle(heh));
+
+            // TODO: CAN BE OPTIMIZED! We can use one set to store all boundary indices. 
+            // But we will do this for now in case we need to store boundary for each cluster group.
+            clusterGroups[clusterGroupIdx1].boundaryIndices.insert(vh1.idx());
+            clusterGroups[clusterGroupIdx1].boundaryIndices.insert(vh2.idx());
+
+            clusterGroups[clusterGroupIdx2].boundaryIndices.insert(vh1.idx());
+            clusterGroups[clusterGroupIdx2].boundaryIndices.insert(vh2.idx());
+        }
+    }
+
+    //for (int i = 0; i < clusterGroupNum;++i) {
+    //    auto clusterGroup = clusterGroups[i];
+    //    std::cout << "Cluster Group size: " << clusterGroup.clusterIndices.size() << std::endl;
+    //    std::cout << "Cluster Boundary size: " << clusterGroup.boundaryIndices.size() << std::endl;
+    //}
+
+    //for (size_t i = 0; i < clusterGroupNum; i++)
+    //{
+    //    std::cout << "Cluster Group id: " << i << " size: " << std::count(clusterGroupIndex.begin(), clusterGroupIndex.end(), i) << std::endl;
+    //}
+    //
+    //for (size_t i = 0; i < clusterGroupIndex.size(); i++)
+    //{
+    //    std::cout << "index: " << i << " clusterGroupIndex[i]: " << clusterGroupIndex[i] << std::endl;
+    //}
+
+}
+
+void Mesh::initVertexBuffer(){
+    for (MyMesh::FaceIter f_it = mesh.faces_begin(); f_it != mesh.faces_end(); ++f_it) {
+        MyMesh::FaceHandle face = *f_it;
+        for (MyMesh::FaceVertexIter fv_it = mesh.cfv_iter(face); fv_it.is_valid(); ++fv_it) {
+            MyMesh::VertexHandle vertex = *fv_it;
+            vkglTF::Vertex v;
+            v.pos = glm::vec3(mesh.point(vertex)[0], mesh.point(vertex)[1], mesh.point(vertex)[2]);
+            v.normal = glm::vec3(mesh.normal(vertex)[0], mesh.normal(vertex)[1], mesh.normal(vertex)[2]);
+            v.uv = glm::vec2(mesh.texcoord2D(vertex)[0], mesh.texcoord2D(vertex)[1]);
+            // TODO: v.tangent not assigned. How to assign?
+            // Assign clusterId and clusterGroupId
+            int clusterId = triangleClusterIndex[face.idx()];
+            v.joint0 = glm::vec4(nodeColors[clusterColorAssignment[clusterId]], clusterId);
+
+            int clusterGroupId = clusterGroupIndex[clusterId];
+            // Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
+            v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
+            vertexBuffer.push_back(v);
+        }
+    }
 }
 
 void Mesh::createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) {

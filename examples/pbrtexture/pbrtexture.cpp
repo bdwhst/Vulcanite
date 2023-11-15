@@ -69,6 +69,7 @@ public:
 	struct Meshes {
 		vkglTF::Model skybox;
 		vkglTF::Model object;
+		vkglTF::Model cube;
 	} models;
 
 	MeshHandler reducedModel;
@@ -80,8 +81,10 @@ public:
 	struct {
 		vks::Buffer object;
 		vks::Buffer skybox;
+		vks::Buffer cube;
 		vks::Buffer topObject;
 		vks::Buffer topSkybox;
+		vks::Buffer topCube;
 		vks::Buffer params;
 	} uniformBuffers;
 
@@ -90,13 +93,16 @@ public:
 		glm::mat4 model;
 		glm::mat4 view;
 		glm::vec3 camPos;
-	} uboMatrices1, uboMatrices2;
+	} uboMatrices1, uboMatrices2, uboMatrices3, uboMatrices4;
 
 	struct UBOCullingMatrices {
 		glm::mat4 model;
 		glm::mat4 lastView;
 		glm::mat4 lastProj;
 	}uboCullingMatrices;
+
+	glm::mat4 model0 = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 3)), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 model1 = glm::scale(glm::mat4(1.0f), glm::vec3(0.2f, 0.2f, 0.03f));
 
 	struct DrawIndexedIndirect {
 		uint32_t indexCount;
@@ -120,8 +126,10 @@ public:
 	struct {
 		VkDescriptorSet object;
 		VkDescriptorSet skybox;
+		VkDescriptorSet cube;
 		VkDescriptorSet topObject;
 		VkDescriptorSet topSkybox;
+		VkDescriptorSet topCube;
 	} descriptorSets;
 
 	struct CullingPushConstants {
@@ -206,12 +214,37 @@ public:
 
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
 
+			VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			imageMemBarrier.image = textures.hizbuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
 			cullingPushConstants.numClusters = clusterinfos.size();
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &cullingDescriptorSet, 0, 0);
 			vkCmdDispatch(drawCmdBuffers[i], (cullingPushConstants.numClusters + 31) / 32, 1, 1);
+
+			imageMemBarrier.image = textures.hizbuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			VkBufferMemoryBarrier bufferBarrier = {};
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -236,10 +269,10 @@ public:
 
 			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-			VkViewport viewport = vks::initializers::viewport((float)width,	(float)height, 0.0f, 1.0f);
+			VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
 			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 
-			VkRect2D scissor = vks::initializers::rect2D(width,	height,	0, 0);
+			VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 
 			VkDeviceSize offsets[1] = { 0 };
@@ -251,7 +284,7 @@ public:
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
-			
+
 
 			// Objects
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.object, 0, NULL);
@@ -264,6 +297,9 @@ public:
 			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.cube, 0, NULL);
+			models.cube.draw(drawCmdBuffers[i]);
+
 
 			/*
 			*	TOP VIEW
@@ -271,7 +307,7 @@ public:
 
 			VkClearRect clearRect = {};
 			clearRect.rect.offset = { 0, 0 };
-			clearRect.rect.extent = { width, height };
+			clearRect.rect.extent = { width / 3, height / 3 };
 			clearRect.baseArrayLayer = 0;
 			clearRect.layerCount = 1;
 
@@ -281,10 +317,10 @@ public:
 
 			vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
 
-			VkViewport viewport1 = vks::initializers::viewport((float)width / 4.0f, (float)height / 4.0f, 0.0f, 1.0f);
+			VkViewport viewport1 = vks::initializers::viewport((float)width / 3.0f, (float)height / 3.0f, 0.0f, 1.0f);
 			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
 
-			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 4.0f, (float)height / 4.0f, 0.0f, 0.0f);
+			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 3.0f, (float)height / 3.0f, 0.0f, 0.0f);
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
 			if (displaySkybox)
 			{
@@ -299,13 +335,16 @@ public:
 			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.topCube, 0, NULL);
+			models.cube.draw(drawCmdBuffers[i]);
+
 
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
 
 
-			/*
+
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -319,81 +358,82 @@ public:
 			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
 
-			 vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 
-			 vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
-			 vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &depthCopyDescriptorSet, 0, 0);
-			 vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &depthCopyDescriptorSet, 0, 0);
+			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
-			 imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
-			 imageMemBarriers[0].image = depthStencil.image;
-			 imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			 imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			 imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			 imageMemBarriers[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			 imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
-			 imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
-			 imageMemBarriers[0].subresourceRange.levelCount = 1;
-			 imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
-			 imageMemBarriers[0].subresourceRange.layerCount = 1;
+			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
+			imageMemBarriers[0].image = depthStencil.image;
+			imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarriers[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+			imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
+			imageMemBarriers[0].subresourceRange.levelCount = 1;
+			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
+			imageMemBarriers[0].subresourceRange.layerCount = 1;
 
-			 vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
-			
-			 vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
-			 for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
-			 {
-			 	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &hizComputeDescriptorSets[j], 0, 0);
-			 	vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
-			 	VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
-			 	imageMemBarrier.image = textures.hizbuffer.image;
-			 	imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-			 	imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-			 	imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			 	imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			 	imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			 	imageMemBarrier.subresourceRange.baseMipLevel = j+1;
-			 	imageMemBarrier.subresourceRange.levelCount = 1;
-			 	imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-			 	imageMemBarrier.subresourceRange.layerCount = 1;
-			 	vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-			 }
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
+			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
+			{
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &hizComputeDescriptorSets[j], 0, 0);
+				vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+				imageMemBarrier.image = textures.hizbuffer.image;
+				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+				imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				imageMemBarrier.subresourceRange.baseMipLevel = j + 1;
+				imageMemBarrier.subresourceRange.levelCount = 1;
+				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+				imageMemBarrier.subresourceRange.layerCount = 1;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			}
+
+			/*
+				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+				imageMemBarrier.image = textures.hizbuffer.image;
+				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				imageMemBarrier.subresourceRange.baseMipLevel = 0;
+				imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+				imageMemBarrier.subresourceRange.layerCount = 1;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 
-			 VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
-			 imageMemBarrier.image = textures.hizbuffer.image;
-			 imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-			 imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			 imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			 imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			 imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			 imageMemBarrier.subresourceRange.baseMipLevel = 0;
-			 imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
-			 imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-			 imageMemBarrier.subresourceRange.layerCount = 1;
-			 vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-			
 
+				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &debugQuadDescriptorSet, 0, NULL);
+				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
+				vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+				vkCmdEndRenderPass(drawCmdBuffers[i]);
 
-			 vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-			 vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-			 vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-			 vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &debugQuadDescriptorSet, 0, NULL);
-			 vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
-			 vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
-			 vkCmdEndRenderPass(drawCmdBuffers[i]);
-
-			imageMemBarrier.image = textures.hizbuffer.image;
-			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			imageMemBarrier.subresourceRange.baseMipLevel = 0;
-			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
-			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+				imageMemBarrier.image = textures.hizbuffer.image;
+				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+				imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				imageMemBarrier.subresourceRange.baseMipLevel = 0;
+				imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+				imageMemBarrier.subresourceRange.layerCount = 1;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			*/
+
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
 	}
@@ -410,7 +450,7 @@ public:
 		naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
 		naniteMesh.meshes[0].createSortedIndexBuffer(vulkanDevice, queue);
-		instance1 = Instance(&naniteMesh.meshes[0], glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+		instance1 = Instance(&naniteMesh.meshes[0], model0);
 		instance1.buildClusterInfo();
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
@@ -419,14 +459,16 @@ public:
 		textures.aoMap.loadFromFile(getAssetPath() + "models/cerberus/ao.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
 		textures.metallicMap.loadFromFile(getAssetPath() + "models/cerberus/metallic.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
 		textures.roughnessMap.loadFromFile(getAssetPath() + "models/cerberus/roughness.ktx", VK_FORMAT_R8_UNORM, vulkanDevice, queue);
+
+		models.cube.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
 	}
 
 	void setupDescriptors()
 	{
 		// Descriptor Pool
 		std::vector<VkDescriptorPoolSize> poolSizes = {
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 32),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 * (textures.hizbuffer.mipLevels - 1) + 1),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
@@ -436,7 +478,7 @@ public:
 		};
 		//TODO: calculate the exact maxsets here
 		VkDescriptorPoolCreateInfo descriptorPoolInfo =	vks::initializers::descriptorPoolCreateInfo(poolSizes, poolSizes.size());
-		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels;
+		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels + 2;
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 
 		// Descriptor set layout
@@ -488,6 +530,38 @@ public:
 			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
+		//Cube
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.cube));
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.cube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.topCube));
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.topCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
 
 		// Sky box
 		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.skybox));
@@ -1743,6 +1817,8 @@ public:
 			&cullingUniformBuffer.buffer,
 			&cullingUniformBuffer.memory,
 			&uboCullingMatrices));
+		cullingUniformBuffer.device = device;
+		VK_CHECK_RESULT(cullingUniformBuffer.map());
 
 		drawIndexedIndirect.firstIndex = 0;
 		drawIndexedIndirect.firstInstance = 0;
@@ -1880,6 +1956,19 @@ public:
 			&uniformBuffers.topSkybox,
 			sizeof(uboMatrices1)));
 
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&uniformBuffers.cube,
+			sizeof(uboMatrices1)));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&uniformBuffers.topCube,
+			sizeof(uboMatrices1)));
+
+
 		// Shared parameter uniform buffer
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -1887,12 +1976,16 @@ public:
 			&uniformBuffers.params,
 			sizeof(uboParams)));
 
+
+
 		// Map persistent
 		VK_CHECK_RESULT(uniformBuffers.object.map());
 		VK_CHECK_RESULT(uniformBuffers.skybox.map());
+		VK_CHECK_RESULT(uniformBuffers.cube.map());
 		VK_CHECK_RESULT(uniformBuffers.params.map());
 		VK_CHECK_RESULT(uniformBuffers.topObject.map());
 		VK_CHECK_RESULT(uniformBuffers.topSkybox.map());
+		VK_CHECK_RESULT(uniformBuffers.topCube.map());
 
 		updateUniformBuffers();
 		updateParams();
@@ -1903,15 +1996,27 @@ public:
 		// 3D object
 		uboMatrices1.projection = camera.matrices.perspective;
 		uboMatrices1.view = camera.matrices.view;
-		uboMatrices1.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		uboMatrices1.model = model0;
 		uboMatrices1.camPos = camera.position * -1.0f;
 		memcpy(uniformBuffers.object.mapped, &uboMatrices1, sizeof(uboMatrices1));
 
 		uboMatrices2.projection = camera.matrices.perspective;
-		uboMatrices2.view = glm::lookAt(glm::vec3(0, -5, 0), glm::vec3(0, 0, 0), glm::vec3(0, 0, -1));
-		uboMatrices2.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		uboMatrices2.camPos = camera.position * -1.0f;
+		uboMatrices2.view = glm::lookAt(glm::vec3(0, -8, 0), glm::vec3(0, 0, 0), glm::vec3(0, 0, -1));
+		uboMatrices2.model = model0;
+		uboMatrices2.camPos = glm::vec3(0, -8, 0);
 		memcpy(uniformBuffers.topObject.mapped, &uboMatrices2, sizeof(uboMatrices2));
+
+		uboMatrices3.projection = camera.matrices.perspective;
+		uboMatrices3.view = camera.matrices.view;
+		uboMatrices3.model = model1;
+		uboMatrices3.camPos = camera.position * -1.0f;
+		memcpy(uniformBuffers.cube.mapped, &uboMatrices3, sizeof(uboMatrices3));
+
+		uboMatrices4.projection = camera.matrices.perspective;
+		uboMatrices4.view = glm::lookAt(glm::vec3(0, -8, 0), glm::vec3(0, 0, 0), glm::vec3(0, 0, -1));
+		uboMatrices4.model = model1;
+		uboMatrices4.camPos = glm::vec3(0, -8, 0);
+		memcpy(uniformBuffers.topCube.mapped, &uboMatrices4, sizeof(uboMatrices4));
 
 		// Skybox
 		uboMatrices1.model = glm::mat4(glm::mat3(camera.matrices.view));
@@ -1949,6 +2054,11 @@ public:
 		submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
 		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
 		VulkanExampleBase::submitFrame();
+
+		uboCullingMatrices.lastView = camera.matrices.view;
+		uboCullingMatrices.lastProj = camera.matrices.perspective;
+		memcpy(cullingUniformBuffer.mapped, &uboCullingMatrices, sizeof(uboCullingMatrices));
+		cullingUniformBuffer.flush();
 	}
 
 	void setupDepthStencil()

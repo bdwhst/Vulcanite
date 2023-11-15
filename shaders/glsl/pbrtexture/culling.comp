@@ -34,7 +34,7 @@ layout(std430, set = 0, binding = 3) buffer NumVertices {
 } numVertices;
 
 layout(set = 0, binding = 4) uniform UBOMats {
-    mat4 model; //TODO: per cluster model matrix
+    mat4 model; //unused
     mat4 lastView;
     mat4 lastProj;
 } ubomats;
@@ -141,7 +141,7 @@ void main()
     // float maxHiz = max(max(z1,z2),max(z3,z4));
     // if(minZ>maxHiz) culled = true;
     
-    if(!culled)
+    if(!culled && bool(index&1))
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
         uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);

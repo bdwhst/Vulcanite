@@ -34,8 +34,8 @@ layout (binding = 9) uniform sampler2D roughnessMap;
 layout (location = 0) out vec4 outColor;
 
 #define PI 3.1415926535897932384626433832795
-#define ALBEDO pow(texture(albedoMap, inUV).rgb, vec3(2.2))
-
+//#define ALBEDO pow(texture(albedoMap, inUV).rgb, vec3(2.2))
+#define ALBEDO vec3(0.5)
 // From http://filmicgames.com/archives/75
 vec3 Uncharted2Tonemap(vec3 x)
 {
@@ -146,8 +146,11 @@ void main()
 	vec3 V = normalize(ubo.camPos - inWorldPos);
 	vec3 R = reflect(-V, N); 
 
-	float metallic = texture(metallicMap, inUV).r;
-	float roughness = texture(roughnessMap, inUV).r;
+	//float metallic = texture(metallicMap, inUV).r;
+	//float roughness = texture(roughnessMap, inUV).r;
+
+	float metallic = 0.1f;
+	float roughness = 0.8f;
 
 	vec3 F0 = vec3(0.04); 
 	F0 = mix(F0, ALBEDO, metallic);
@@ -173,8 +176,8 @@ void main()
 	// Ambient part
 	vec3 kD = 1.0 - F;
 	kD *= 1.0 - metallic;	  
-	vec3 ambient = (kD * diffuse + specular) * texture(aoMap, inUV).rrr;
-	
+	//vec3 ambient = (kD * diffuse + specular) * texture(aoMap, inUV).rrr;
+	vec3 ambient = (kD * diffuse + specular);
 	vec3 color = ambient + Lo;
 
 	// Tone mapping

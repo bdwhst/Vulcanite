@@ -122,26 +122,26 @@ void main()
     if(index >= pcs.numClusters) return;
 
     bool culled = false;
-    // Cluster currCluster = indata[index];
-    // vec4 clipXY;
-    // float minZ;
-    // getScreenAABB(currCluster,clipXY,minZ);
-    // vec4 screenSize = textureSize(lastHZB, 0).xyxy;
-    // vec4 screenXY = clipXY * screenSize;
-    // vec2 screenSpan = screenXY.zw-screenXY.xy;
-    // float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
-    // float hzbLevel_1 = max(hzbLevel-1,0);
-    // float texScale = exp2(-hzbLevel_1);
-    // vec2 texSpan = ceil(screenXY.zw*texScale) - floor(screenXY.xy*texScale);
-    // if(texSpan.x<2&&texSpan.y<2) hzbLevel = hzbLevel_1;
-    // float z1 = textureLod(lastHZB,vec2(clipXY.x,clipXY.y),hzbLevel).x;
-    // float z2 = textureLod(lastHZB,vec2(clipXY.x,clipXY.w),hzbLevel).x;
-    // float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y),hzbLevel).x;
-    // float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
-    // float maxHiz = max(max(z1,z2),max(z3,z4));
-    // if(minZ>maxHiz) culled = true;
+    Cluster currCluster = indata[index];
+    vec4 clipXY;
+    float minZ;
+    getScreenAABB(currCluster,clipXY,minZ);
+    vec4 screenSize = textureSize(lastHZB, 0).xyxy;
+    vec4 screenXY = clipXY * screenSize;
+    vec2 screenSpan = screenXY.zw-screenXY.xy;
+    float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
+    float hzbLevel_1 = max(hzbLevel-1,0);
+    float texScale = exp2(-hzbLevel_1);
+    vec2 texSpan = ceil(screenXY.zw*texScale) - floor(screenXY.xy*texScale);
+    if(texSpan.x<2&&texSpan.y<2) hzbLevel = hzbLevel_1;
+    float z1 = textureLod(lastHZB,vec2(clipXY.x,clipXY.y),hzbLevel).x;
+    float z2 = textureLod(lastHZB,vec2(clipXY.x,clipXY.w),hzbLevel).x;
+    float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y),hzbLevel).x;
+    float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
+    float maxHiz = max(max(z1,z2),max(z3,z4));
+    if(minZ>maxHiz+0.02) culled = true;
     
-    if(!culled && bool(index&1))
+    if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
         uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);

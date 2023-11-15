@@ -307,7 +307,7 @@ public:
 
 			VkClearRect clearRect = {};
 			clearRect.rect.offset = { 0, 0 };
-			clearRect.rect.extent = { width / 3, height / 3 };
+			clearRect.rect.extent = { width / 3, width / 3 };
 			clearRect.baseArrayLayer = 0;
 			clearRect.layerCount = 1;
 
@@ -317,10 +317,10 @@ public:
 
 			vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
 
-			VkViewport viewport1 = vks::initializers::viewport((float)width / 3.0f, (float)height / 3.0f, 0.0f, 1.0f);
+			VkViewport viewport1 = vks::initializers::viewport((float)width / 3.0f, (float)width / 3.0f, 0.0f, 1.0f);
 			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
 
-			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 3.0f, (float)height / 3.0f, 0.0f, 0.0f);
+			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 3.0f, (float)width / 3.0f, 0.0f, 0.0f);
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
 			if (displaySkybox)
 			{
@@ -343,7 +343,9 @@ public:
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
 
-
+			/*
+			*  HZB build
+			*/
 
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
@@ -1876,9 +1878,9 @@ public:
 		VK_CHECK_RESULT(vkCreateImageView(device, &viewCI, nullptr, &textures.hizbuffer.view));
 		// Sampler
 		VkSamplerCreateInfo samplerCI = vks::initializers::samplerCreateInfo();
-		samplerCI.magFilter = VK_FILTER_LINEAR;
-		samplerCI.minFilter = VK_FILTER_LINEAR;
-		samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerCI.magFilter = VK_FILTER_NEAREST;
+		samplerCI.minFilter = VK_FILTER_NEAREST;
+		samplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 		samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -2000,10 +2002,10 @@ public:
 		uboMatrices1.camPos = camera.position * -1.0f;
 		memcpy(uniformBuffers.object.mapped, &uboMatrices1, sizeof(uboMatrices1));
 
-		uboMatrices2.projection = camera.matrices.perspective;
-		uboMatrices2.view = glm::lookAt(glm::vec3(0, -8, 0), glm::vec3(0, 0, 0), glm::vec3(0, 0, -1));
+		uboMatrices2.projection = glm::perspective(90.0f, 1.0f, 0.1f, 100.0f);
+		uboMatrices2.view = glm::lookAt(glm::vec3(0, -3, 1), glm::vec3(0, 0, 1), glm::vec3(0, 0, -1));
 		uboMatrices2.model = model0;
-		uboMatrices2.camPos = glm::vec3(0, -8, 0);
+		uboMatrices2.camPos = glm::vec3(0, -5, 0);
 		memcpy(uniformBuffers.topObject.mapped, &uboMatrices2, sizeof(uboMatrices2));
 
 		uboMatrices3.projection = camera.matrices.perspective;
@@ -2012,10 +2014,10 @@ public:
 		uboMatrices3.camPos = camera.position * -1.0f;
 		memcpy(uniformBuffers.cube.mapped, &uboMatrices3, sizeof(uboMatrices3));
 
-		uboMatrices4.projection = camera.matrices.perspective;
-		uboMatrices4.view = glm::lookAt(glm::vec3(0, -8, 0), glm::vec3(0, 0, 0), glm::vec3(0, 0, -1));
+		uboMatrices4.projection = glm::perspective(90.0f, 1.0f, 0.1f, 100.0f);
+		uboMatrices4.view = glm::lookAt(glm::vec3(0, -3, 1), glm::vec3(0, 0, 1), glm::vec3(0, 0, -1));
 		uboMatrices4.model = model1;
-		uboMatrices4.camPos = glm::vec3(0, -8, 0);
+		uboMatrices4.camPos = glm::vec3(0, -5, 0);
 		memcpy(uniformBuffers.topCube.mapped, &uboMatrices4, sizeof(uboMatrices4));
 
 		// Skybox

@@ -206,6 +206,27 @@ public:
 
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
 
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
+			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
+			cullingPushConstants.numClusters = models.object.indexBuffer.size();
+			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &cullingDescriptorSet, 0, 0);
+			vkCmdDispatch(drawCmdBuffers[i], (cullingPushConstants.numClusters + 31) / 32, 1, 1);
+
+			VkBufferMemoryBarrier bufferBarrier = {};
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = drawIndexedIndirectBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+
+
 			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			VkViewport viewport = vks::initializers::viewport((float)width,	(float)height, 0.0f, 1.0f);
@@ -242,7 +263,7 @@ public:
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
-			/*
+			
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -330,7 +351,7 @@ public:
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-			*/
+			
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
 	}
@@ -1599,7 +1620,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			models.object.indices.count,
+			models.object.indices.count * sizeof(uint32_t),
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));
@@ -1668,6 +1689,9 @@ public:
 			&drawIndexedIndirectBuffer.buffer,
 			&drawIndexedIndirectBuffer.memory,
 			&drawIndexedIndirect));
+
+		drawIndexedIndirectBuffer.device = device;
+		VK_CHECK_RESULT(drawIndexedIndirectBuffer.map());
 	}
 
 	void createHiZBuffer()
@@ -1820,6 +1844,15 @@ public:
 	void draw()
 	{
 		VulkanExampleBase::prepareFrame();
+
+		if (drawIndexedIndirectBuffer.mapped)
+		{
+			//vkDeviceWaitIdle(device);
+			drawIndexedIndirect.indexCount = 0;
+			memcpy(drawIndexedIndirectBuffer.mapped, &drawIndexedIndirect, sizeof(DrawIndexedIndirect));
+			drawIndexedIndirectBuffer.flush();
+			
+		}
 
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];

@@ -26,9 +26,10 @@ layout(std140, set = 0, binding = 2) buffer TrianglesOut {
 };
 
 layout(std140, set = 0, binding = 3) buffer NumVertices {
-    uint vertexCount; 
+    uint indexCount; 
     uint instanceCount;
-    uint firstVertex;
+    uint firstIndex;
+    uint vertexOffset;
     uint firstInstance;
 } numVertices;
 
@@ -44,26 +45,112 @@ layout(push_constant) uniform PushConstants {
     int numClusters;
 } pcs;
 
+// Naive AABB compute
+void getScreenAABB(Cluster c, inout vec4 screenXY, inout float minZ)
+{
+    //TODO: reduce number of points check here
+    vec4 p0 = vec4(c.pMin.x,c.pMin.y,c.pMin.z,1.0);
+    vec4 p1 = vec4(c.pMax.x,c.pMin.y,c.pMin.z,1.0);
+    vec4 p2 = vec4(c.pMin.x,c.pMax.y,c.pMin.z,1.0);
+    vec4 p3 = vec4(c.pMin.x,c.pMin.y,c.pMax.z,1.0);
+    vec4 p4 = vec4(c.pMax.x,c.pMax.y,c.pMin.z,1.0);
+    vec4 p5 = vec4(c.pMin.x,c.pMax.y,c.pMax.z,1.0);
+    vec4 p6 = vec4(c.pMax.x,c.pMin.y,c.pMax.z,1.0);
+    vec4 p7 = vec4(c.pMax.x,c.pMax.y,c.pMax.z,1.0);
+
+    vec4 p0h = ubomats.lastProj * ubomats.lastView * p0;
+    vec4 p1h = ubomats.lastProj * ubomats.lastView * p1;
+    vec4 p2h = ubomats.lastProj * ubomats.lastView * p2;
+    vec4 p3h = ubomats.lastProj * ubomats.lastView * p3;
+    vec4 p4h = ubomats.lastProj * ubomats.lastView * p4;
+    vec4 p5h = ubomats.lastProj * ubomats.lastView * p5;
+    vec4 p6h = ubomats.lastProj * ubomats.lastView * p6;
+    vec4 p7h = ubomats.lastProj * ubomats.lastView * p7;
+
+    p0h.xyz /= p0h.w;
+    p1h.xyz /= p1h.w;
+    p2h.xyz /= p2h.w;
+    p3h.xyz /= p3h.w;
+    p4h.xyz /= p4h.w;
+    p5h.xyz /= p5h.w;
+    p6h.xyz /= p6h.w;
+    p7h.xyz /= p7h.w;
+
+    p0h = p0h*0.5+0.5;
+    p1h = p1h*0.5+0.5;
+    p2h = p2h*0.5+0.5;
+    p3h = p3h*0.5+0.5;
+    p4h = p4h*0.5+0.5;
+    p5h = p5h*0.5+0.5;
+    p6h = p6h*0.5+0.5;
+    p7h = p7h*0.5+0.5;
+
+    minZ = 1.0;
+    minZ = min(minZ, min(p0h.z,p1h.z));
+    minZ = min(minZ, min(p2h.z,p3h.z));
+    minZ = min(minZ, min(p4h.z,p5h.z));
+    minZ = min(minZ, min(p6h.z,p7h.z));
+
+    vec2 minXY = vec2(1.0);
+    minXY = min(minXY, min(p0h.xy,p1h.xy));
+    minXY = min(minXY, min(p2h.xy,p3h.xy));
+    minXY = min(minXY, min(p4h.xy,p5h.xy));
+    minXY = min(minXY, min(p6h.xy,p7h.xy));
+
+    vec2 maxXY = vec2(0.0);
+    maxXY = max(maxXY, max(p0h.xy,p1h.xy));
+    maxXY = max(maxXY, max(p2h.xy,p3h.xy));
+    maxXY = max(maxXY, max(p4h.xy,p5h.xy));
+    maxXY = max(maxXY, max(p6h.xy,p7h.xy));
+
+    screenXY.xy = minXY;
+    screenXY.zw = maxXY;
+}
+
 void main()
 {
     uint index = gl_GlobalInvocationID.x;
     
     if(index >= pcs.numClusters) return;
 
-    if (index == 0) {
-        numVertices.vertexCount = 0;
-	}
-    barrier();
+    // if (index == 0) {
+    //     numVertices.indexCount = 0;
+	// }
+    // barrier();
 
     bool culled = false;
+    Cluster currCluster = indata[index];
+    vec4 clipXY;
+    float minZ;
+    getScreenAABB(currCluster,clipXY,minZ);
+    vec4 screenSize = textureSize(lastHZB, 0).xyxy;
+    vec4 screenXY = clipXY * screenSize;
+    vec2 screenSpan = screenXY.zw-screenXY.xy;
+    float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
+    float hzbLevel_1 = max(hzbLevel-1,0);
+    float texScale = exp2(-hzbLevel_1);
+    vec2 texSpan = ceil(screenXY.zw*texScale) - floor(screenXY.xy*texScale);
+    if(texSpan.x<2&&texSpan.y<2) hzbLevel = hzbLevel_1;
+    float z1 = textureLod(lastHZB,vec2(clipXY.x,clipXY.y));
+    float z2 = textureLod(lastHZB,vec2(clipXY.x,clipXY.w));
+    float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y));
+    float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w));
+    float maxHiz = max(max(z1,z2),max(z3,z4));
+    if(minZ>maxHiz) culled = true;
 
+    
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
-        uint nIdx = atomicAdd(numVertices.vertexCount, totalVertices);
+        uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);
         for(int i=0;i<totalVertices;i++)
         {
-            outTriangles[nIdx+i] = inTriangles[nIdx+i];
+            outTriangles[nIdx+i] = inTriangles[indata[index].triangleStart*3+i];
         }
+
+        // uint nIdx = atomicAdd(numVertices.indexCount, 1);
+        // outTriangles[3*nIdx] = inTriangles[3*nIdx];
+        // outTriangles[3*nIdx+1] = inTriangles[3*nIdx+1];
+        // outTriangles[3*nIdx+2] = inTriangles[3*nIdx+2];
     }
 }

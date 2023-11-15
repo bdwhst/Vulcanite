@@ -73,8 +73,8 @@ void NaniteMesh::generateNaniteInfo() {
 
 		// Mesh simplification
 		// TODO: Need to lock edge
-		meshLOD.lockClusterGroupBoundaries(mymesh);
-		meshLOD.simplifyMesh(mymesh); 
+		/*meshLOD.lockClusterGroupBoundaries(mymesh);
+		meshLOD.simplifyMesh(mymesh);*/ 
 		clusterGroupNum = meshLOD.clusterGroupNum;
 		std::cout << "LOD " << lodLevel++ << " generated" << std::endl;
 

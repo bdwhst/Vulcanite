@@ -52,15 +52,16 @@ void Mesh::generateCluster()
         });
 
     triangleVertexIndicesSortedByClusterIdx.resize(mesh.n_faces() * 3);
-    for (const auto triangleIndex: triangleIndicesSortedByClusterIdx)
+    for (int i = 0; i < triangleIndicesSortedByClusterIdx.size(); ++i)
     {
+        auto triangleIndex = triangleIndicesSortedByClusterIdx[i];
 		auto face = mesh.face_handle(triangleIndex);
 		auto fv_it = mesh.fv_iter(face);
-		triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3] = fv_it->idx();
+		triangleVertexIndicesSortedByClusterIdx[i * 3] = fv_it->idx();
         ++fv_it;
-        triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3 + 1] = fv_it->idx();
+        triangleVertexIndicesSortedByClusterIdx[i * 3 + 1] = fv_it->idx();
         ++fv_it;
-        triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3 + 2] = fv_it->idx();
+        triangleVertexIndicesSortedByClusterIdx[i * 3 + 2] = fv_it->idx();
 	}
     clusters.resize(clusterNum);
     for (MyMesh::FaceIter face_it = mesh.faces_begin(); face_it != mesh.faces_end(); ++face_it) {

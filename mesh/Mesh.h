@@ -78,13 +78,14 @@ public:
 
 	void initVertexBuffer();
 	void createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
+	void createSortedIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
 	void draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineLayout pipelineLayout, uint32_t bindImageSet);
 	std::vector<glm::vec3> positions;
 
 	vks::VulkanDevice* device;
 	const vkglTF::Model* model;
 	vkglTF::Model::Vertices vertices;
-	vkglTF::Model::Indices indices;
+	vkglTF::Model::Indices sortedIndices;
 	std::vector<uint32_t> indexBuffer;
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;

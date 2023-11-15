@@ -204,7 +204,7 @@ public:
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
-			cullingPushConstants.numClusters = models.object.indexBuffer.size();
+			cullingPushConstants.numClusters = clusterinfos.size();
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &cullingDescriptorSet, 0, 0);
 			vkCmdDispatch(drawCmdBuffers[i], (cullingPushConstants.numClusters + 31) / 32, 1, 1);
@@ -221,7 +221,14 @@ public:
 
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
-
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = culledIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
@@ -250,7 +257,8 @@ public:
 
 			//TODO: support multiple primitives in a model
 			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
-			vkCmdBindIndexBuffer(drawCmdBuffers[i], models.object.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 			//reducedModel.drawSimplifiedModel(drawCmdBuffers[i], 0, nullptr, 1);
@@ -259,7 +267,7 @@ public:
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
-			
+			/*
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -347,7 +355,7 @@ public:
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-			
+			*/
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
 	}
@@ -363,7 +371,7 @@ public:
 		naniteMesh.generateNaniteInfo();
 		naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
-
+		naniteMesh.meshes[0].createSortedIndexBuffer(vulkanDevice, queue);
 		instance1 = Instance(&naniteMesh.meshes[0], glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
 		instance1.buildClusterInfo();
 		//reducedModel.simplifyModel(vulkanDevice, queue);
@@ -518,7 +526,7 @@ public:
 		drawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		VkDescriptorBufferInfo inputIndicesInfo{};
-		inputIndicesInfo.buffer = models.object.indices.buffer;
+		inputIndicesInfo.buffer = instance1.referenceMesh->sortedIndices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
 		writeDescriptorSets = {
 			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &clustersInfoBuffer.descriptor),
@@ -575,7 +583,7 @@ public:
 
 		// PBR pipeline
 		rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-		//rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
+		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
 		//rasterizationState.cullMode = VK_CULL_MODE_NONE;
 		shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 		shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -1626,10 +1634,14 @@ public:
 		
 		for (auto& ci:instance1.clusterInfo)
 		{
+			assert(ci.triangleIndicesEnd >= 0 && ci.triangleIndicesEnd <= models.object.indices.count/3);
+			assert(ci.triangleIndicesStart >= 0 && ci.triangleIndicesStart < models.object.indices.count / 3);
+			assert(ci.triangleIndicesStart < ci.triangleIndicesEnd);
 			clusterinfos.emplace_back(ci);
 		}
 
 		vks::Buffer clusterStaging;
+		//std::cout << "size of clusterInfo:" << sizeof(ClusterInfo) << std::endl;
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
@@ -1642,7 +1654,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			clusterinfos.size()*sizeof(ClusterInfo),
+			clusterinfos.size() * sizeof(ClusterInfo),
 			&clustersInfoBuffer.buffer,
 			&clustersInfoBuffer.memory,
 			nullptr));
@@ -1842,17 +1854,16 @@ public:
 
 		if (drawIndexedIndirectBuffer.mapped)
 		{
-			//vkDeviceWaitIdle(device);
+			//
 			drawIndexedIndirect.indexCount = 0;
 			memcpy(drawIndexedIndirectBuffer.mapped, &drawIndexedIndirect, sizeof(DrawIndexedIndirect));
 			drawIndexedIndirectBuffer.flush();
-			
+			vkDeviceWaitIdle(device);
 		}
 
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
 		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
-
 		VulkanExampleBase::submitFrame();
 	}
 

@@ -324,7 +324,7 @@ void Mesh::createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) 
     // Create device local buffers
     // Vertex buffer
     VK_CHECK_RESULT(device->createBuffer(
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | vkglTF::memoryPropertyFlags,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         vertexBufferSize,
         &vertices.buffer,
@@ -342,6 +342,51 @@ void Mesh::createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) 
 
     vkDestroyBuffer(device->logicalDevice, vertexStaging.buffer, nullptr);
     vkFreeMemory(device->logicalDevice, vertexStaging.memory, nullptr);
+}
+
+void Mesh::createSortedIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue)
+{
+    size_t indexBufferSize = triangleVertexIndicesSortedByClusterIdx.size() * sizeof(uint32_t);
+    sortedIndices.count = static_cast<uint32_t>(triangleVertexIndicesSortedByClusterIdx.size());
+
+    assert(indexBufferSize > 0);
+
+    struct StagingBuffer {
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+    } indexStaging;
+
+    // Create staging buffers
+    // Vertex data
+    VK_CHECK_RESULT(device->createBuffer(
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        indexBufferSize,
+        &indexStaging.buffer,
+        &indexStaging.memory,
+        triangleVertexIndicesSortedByClusterIdx.data()));
+
+    // Create device local buffers
+    // Vertex buffer
+    VK_CHECK_RESULT(device->createBuffer(
+        VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        indexBufferSize,
+        &sortedIndices.buffer,
+        &sortedIndices.memory));
+
+    // Copy from staging buffers
+    VkCommandBuffer copyCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+    VkBufferCopy copyRegion = {};
+
+    copyRegion.size = indexBufferSize;
+    vkCmdCopyBuffer(copyCmd, indexStaging.buffer, sortedIndices.buffer, 1, &copyRegion);
+
+    device->flushCommandBuffer(copyCmd, transferQueue, true);
+
+    vkDestroyBuffer(device->logicalDevice, indexStaging.buffer, nullptr);
+    vkFreeMemory(device->logicalDevice, indexStaging.memory, nullptr);
 }
 
 void Mesh::draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineLayout pipelineLayout, uint32_t bindImageSet) 

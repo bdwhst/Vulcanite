@@ -13,19 +13,19 @@ struct Cluster
 };
 
 
-layout(std140, set = 0, binding = 0) buffer ClustersIn {
+layout(std430, set = 0, binding = 0) buffer readonly ClustersIn {
    Cluster indata[ ];
 };
 
-layout(std140, set = 0, binding = 1) buffer TrianglesIn {
-   int inTriangles[ ];
+layout(std430, set = 0, binding = 1) buffer readonly TrianglesIn {
+   uint inTriangles[ ];
 };
 
-layout(std140, set = 0, binding = 2) buffer TrianglesOut {
-   int outTriangles[ ];
+layout(std430, set = 0, binding = 2) buffer writeonly TrianglesOut {
+   uint outTriangles[ ];
 };
 
-layout(std140, set = 0, binding = 3) buffer NumVertices {
+layout(std430, set = 0, binding = 3) buffer NumVertices {
     uint indexCount; 
     uint instanceCount;
     uint firstIndex;
@@ -113,11 +113,6 @@ void main()
     
     if(index >= pcs.numClusters) return;
 
-    // if (index == 0) {
-    //     numVertices.indexCount = 0;
-	// }
-    // barrier();
-
     bool culled = false;
     // Cluster currCluster = indata[index];
     // vec4 clipXY;
@@ -137,20 +132,18 @@ void main()
     // float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
     // float maxHiz = max(max(z1,z2),max(z3,z4));
     // if(minZ>maxHiz) culled = true;
-
     
     if(!culled)
     {
-        // uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
-        // uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);
-        // for(int i=0;i<totalVertices;i++)
-        // {
-        //     outTriangles[nIdx+i] = inTriangles[indata[index].triangleStart*3+i];
-        // }
-
-        uint nIdx = atomicAdd(numVertices.indexCount, 1);
-        outTriangles[3*nIdx] = inTriangles[3*nIdx];
-        outTriangles[3*nIdx+1] = inTriangles[3*nIdx+1];
-        outTriangles[3*nIdx+2] = inTriangles[3*nIdx+2];
+        uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
+        uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);
+        for(uint i = 0; i < totalVertices / 3; i++)
+        {
+            uint inIdx = indata[index].triangleStart * 3 + 3 * i;
+            uint outIdx = nIdx + 3 * i;
+            outTriangles[outIdx + 0] = inTriangles[inIdx + 0];
+            outTriangles[outIdx + 1] = inTriangles[inIdx + 1];
+            outTriangles[outIdx + 2] = inTriangles[inIdx + 2];
+        }
     }
 }

@@ -2,14 +2,15 @@
 #include "Mesh.h"
 #include "glm/glm.hpp"
 #include "Cluster.h"
+
 //ClusterInfo for drawing
 struct ClusterInfo {
-	glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
-	glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
+    alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
+    alignas(16) glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
 	// [triangleIndicesStart, triangleIndicesEnd) is the range of triangleIndicesSortedByClusterIdx
 	// left close, right open
-	uint32_t triangleIndicesStart; // Used to index Mesh::triangleIndicesSortedByClusterIdx
-	uint32_t triangleIndicesEnd; // Used to index Mesh::triangleIndicesSortedByClusterIdx
+    alignas(4) uint32_t triangleIndicesStart; // Used to index Mesh::triangleIndicesSortedByClusterIdx
+    alignas(4) uint32_t triangleIndicesEnd; // Used to index Mesh::triangleIndicesSortedByClusterIdx
 
 	void mergeAABB(const glm::vec3& pMinOther, const glm::vec3& pMaxOther) {
 		pMinWorld = glm::min(pMinWorld, pMinOther);

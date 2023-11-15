@@ -57,7 +57,7 @@ void NaniteMesh::generateNaniteInfo() {
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
 	int clusterGroupNum = -1;
-	int target = 5;
+	int target = 1;
 	do
 	{
 		// For each lod mesh
@@ -73,8 +73,8 @@ void NaniteMesh::generateNaniteInfo() {
 
 		// Mesh simplification
 		// TODO: Need to lock edge
-		meshLOD.lockClusterGroupBoundaries(mymesh);
-		meshLOD.simplifyMesh(mymesh); 
+		//meshLOD.lockClusterGroupBoundaries(mymesh);
+		//meshLOD.simplifyMesh(mymesh); 
 		// Unlock all vertices
 		for (auto & v_it: mymesh.vertices()) {
 			mymesh.status(v_it).set_locked(false);

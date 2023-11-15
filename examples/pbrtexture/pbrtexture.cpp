@@ -14,6 +14,7 @@
 #include "VulkanglTFModel.h"
 #include "MeshHandler.h"
 #include "NaniteMesh.h"
+#include "Instance.h"
 
 #define ENABLE_VALIDATION true
 
@@ -72,6 +73,9 @@ public:
 
 	MeshHandler reducedModel;
 	NaniteMesh naniteMesh;
+	Instance instance1;
+
+	std::vector<ClusterInfo> clusterinfos;
 
 	struct {
 		vks::Buffer object;
@@ -115,14 +119,6 @@ public:
 		VkDescriptorSet object;
 		VkDescriptorSet skybox;
 	} descriptorSets;
-
-	struct ClusterInfo
-	{
-		glm::vec3 pMin;
-		glm::vec3 pMax;
-		uint triangleStart;
-		uint triangleEnd;
-	};
 
 	struct CullingPushConstants {
 		int numClusters;
@@ -367,6 +363,9 @@ public:
 		naniteMesh.generateNaniteInfo();
 		naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
+
+		instance1 = Instance(&naniteMesh.meshes[0], glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)));
+		instance1.buildClusterInfo();
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
 		textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
@@ -1624,13 +1623,9 @@ public:
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));
-		std::vector<ClusterInfo> clusterinfos;
-		for (auto& c:naniteMesh.meshes[0].clusters)
+		
+		for (auto& ci:instance1.clusterInfo)
 		{
-			ClusterInfo ci;
-			ci.pMin = c.pMinWorld;
-			ci.pMax = c.pMaxWorld;
-			//ci.triangleStart = ;
 			clusterinfos.emplace_back(ci);
 		}
 
@@ -1664,7 +1659,7 @@ public:
 		vkFreeMemory(vulkanDevice->logicalDevice, clusterStaging.memory, nullptr);
 
 
-		uboCullingMatrices.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));//TODO: precompute model transformation in bounding box compute
+		uboCullingMatrices.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		uboCullingMatrices.lastView = camera.matrices.view;
 		uboCullingMatrices.lastProj = camera.matrices.perspective;
 

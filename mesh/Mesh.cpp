@@ -62,60 +62,13 @@ void Mesh::generateCluster()
         ++fv_it;
         triangleVertexIndicesSortedByClusterIdx[triangleIndex * 3 + 2] = fv_it->idx();
 	}
-
-    // Init Clusters
     clusters.resize(clusterNum);
     for (MyMesh::FaceIter face_it = mesh.faces_begin(); face_it != mesh.faces_end(); ++face_it) {
         MyMesh::FaceHandle fh = *face_it;
         auto clusterIdx = triangleClusterIndex[fh.idx()];
-        auto & cluster = clusters[clusterIdx];
+        auto& cluster = clusters[clusterIdx];
         cluster.triangleIndices.push_back(fh.idx());
-        glm::vec3 pMinWorld, pMaxWorld;
-        glm::vec3 p0, p1, p2;
-        MyMesh::FaceVertexIter fv_it = mesh.fv_iter(fh);
-
-        // Get the positions of the three vertices
-        auto point0 = mesh.point(*fv_it);
-        ++fv_it;
-        auto point1 = mesh.point(*fv_it);
-        ++fv_it;
-        auto point2 = mesh.point(*fv_it);
-
-        p0[0] = point0[0];
-        p0[1] = point0[1];
-        p0[2] = point0[2];
-
-        p1[0] = point1[0];
-        p1[1] = point1[1];
-        p1[2] = point1[2];
-
-        p2[0] = point2[0];
-        p2[1] = point2[1];
-        p2[2] = point2[2];
-
-        p0 = glm::vec3(modelMatrix * glm::vec4(p0, 1.0f));
-        p1 = glm::vec3(modelMatrix * glm::vec4(p1, 1.0f));
-        p2 = glm::vec3(modelMatrix * glm::vec4(p2, 1.0f));
-        
-        getTriangleAABB(p0, p1, p2, pMinWorld, pMaxWorld);
-
-        cluster.mergeAABB(pMinWorld, pMaxWorld);  
     }
-
-
-    uint32_t currClusterIdx = -1;
-    for (size_t i = 0; i < triangleIndicesSortedByClusterIdx.size(); i++)
-    {
-        auto currTriangleIndex = triangleIndicesSortedByClusterIdx[i];
-        if (triangleClusterIndex[currTriangleIndex] != currClusterIdx)
-        {
-            if (currClusterIdx != -1)
-                clusters[currClusterIdx].triangleIndicesEnd = i;
-            currClusterIdx = triangleClusterIndex[currTriangleIndex];
-            clusters[currClusterIdx].triangleIndicesStart = i;
-        }
-    }
-    clusters[currClusterIdx].triangleIndicesEnd = triangleIndicesSortedByClusterIdx.size();
 
     //for (size_t i = 0; i < clusterNum; i++)
     //{

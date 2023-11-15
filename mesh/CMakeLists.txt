@@ -6,6 +6,7 @@ set(headers
     "NaniteMesh.h"
     "Graph.h"
     "utils.h"
+    "Instance.h"
 )
 
 set(sources
@@ -17,6 +18,7 @@ set(sources
     "NaniteMesh.cpp"
     "Graph.cpp"
     "utils.cpp"
+    "Instance.cpp"
 )
 
 list(SORT headers)

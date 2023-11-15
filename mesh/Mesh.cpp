@@ -70,7 +70,7 @@ void Mesh::generateCluster()
         auto clusterIdx = triangleClusterIndex[fh.idx()];
         auto & cluster = clusters[clusterIdx];
         cluster.triangleIndices.push_back(fh.idx());
-        glm::vec3 pMin, pMax;
+        glm::vec3 pMinWorld, pMaxWorld;
         glm::vec3 p0, p1, p2;
         MyMesh::FaceVertexIter fv_it = mesh.fv_iter(fh);
 
@@ -93,9 +93,13 @@ void Mesh::generateCluster()
         p2[1] = point2[1];
         p2[2] = point2[2];
 
-        getTriangleAABB(p0, p1, p2, pMin, pMax);
+        p0 = glm::vec3(modelMatrix * glm::vec4(p0, 1.0f));
+        p1 = glm::vec3(modelMatrix * glm::vec4(p1, 1.0f));
+        p2 = glm::vec3(modelMatrix * glm::vec4(p2, 1.0f));
+        
+        getTriangleAABB(p0, p1, p2, pMinWorld, pMaxWorld);
 
-        cluster.mergeAABB(pMin, pMax);  
+        cluster.mergeAABB(pMinWorld, pMaxWorld);  
     }
 
     //for (size_t i = 0; i < clusterNum; i++)
@@ -255,6 +259,22 @@ void Mesh::generateClusterGroup()
         MyMesh::HalfedgeHandle heh = mesh.halfedge_handle(edge, 0);
         MyMesh::FaceHandle fh = mesh.face_handle(heh);
         MyMesh::FaceHandle fh2 = mesh.opposite_face_handle(heh);
+        if (mesh.is_boundary(heh) && fh.idx() > 0) {
+            auto clusterIdx1 = triangleClusterIndex[fh.idx()];
+            auto clusterGroupIdx1 = clusterGroupIndex[clusterIdx1];
+            auto vh1 = mesh.to_vertex_handle(heh);
+            auto vh2 = mesh.from_vertex_handle(heh);
+            clusterGroups[clusterGroupIdx1].boundaryIndices.insert(vh1.idx());
+            clusterGroups[clusterGroupIdx1].boundaryIndices.insert(vh2.idx());
+        }
+        else if (mesh.is_boundary(mesh.opposite_halfedge_handle(heh)) && fh2.idx() > 0) {
+            auto clusterIdx2 = triangleClusterIndex[fh2.idx()];
+            auto clusterGroupIdx2 = clusterGroupIndex[clusterIdx2];
+            auto vh1 = mesh.to_vertex_handle(mesh.opposite_halfedge_handle(heh));
+            auto vh2 = mesh.from_vertex_handle(mesh.opposite_halfedge_handle(heh));
+            clusterGroups[clusterGroupIdx2].boundaryIndices.insert(vh1.idx());
+            clusterGroups[clusterGroupIdx2].boundaryIndices.insert(vh2.idx());
+        }
         if (fh.idx() < 0 || fh2.idx() < 0) continue;
         auto clusterIdx1 = triangleClusterIndex[fh.idx()];
         auto clusterIdx2 = triangleClusterIndex[fh2.idx()];
@@ -264,8 +284,6 @@ void Mesh::generateClusterGroup()
             auto vh1 = mesh.to_vertex_handle(heh);
             auto vh2 = mesh.to_vertex_handle(mesh.opposite_halfedge_handle(heh));
 
-            // TODO: CAN BE OPTIMIZED! We can use one set to store all boundary indices. 
-            // But we will do this for now in case we need to store boundary for each cluster group.
             clusterGroups[clusterGroupIdx1].boundaryIndices.insert(vh1.idx());
             clusterGroups[clusterGroupIdx1].boundaryIndices.insert(vh2.idx());
 
@@ -308,7 +326,7 @@ void Mesh::initVertexBuffer(){
 
             int clusterGroupId = clusterGroupIndex[clusterId];
             // Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
-            v.weight0 = glm::vec4(nodeColors[face.idx() % nodeColors.size()], clusterGroupId);
+            v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
             vertexBuffer.push_back(v);
         }
     }

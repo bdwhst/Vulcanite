@@ -45,6 +45,7 @@ public:
 	void simplifyMesh(MyMesh& mymesh);
 
 	MyMesh mesh;
+	glm::mat4 modelMatrix;
 
 	std::vector<uint32_t> triangleIndicesSortedByClusterIdx; // face_idx sort by cluster
 	std::vector<uint32_t> triangleVertexIndicesSortedByClusterIdx; // (vert1, vert2, vert3) sort by cluster

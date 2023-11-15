@@ -1628,8 +1628,8 @@ public:
 		for (auto& c:naniteMesh.meshes[0].clusters)
 		{
 			ClusterInfo ci;
-			ci.pMin = c.pMin;
-			ci.pMax = c.pMax;
+			ci.pMin = c.pMinWorld;
+			ci.pMax = c.pMaxWorld;
 			//ci.triangleStart = ;
 			clusterinfos.emplace_back(ci);
 		}

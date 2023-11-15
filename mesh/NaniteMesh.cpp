@@ -8,6 +8,7 @@ void NaniteMesh::loadvkglTFModel(const vkglTF::Model& model)
 		// TODO: Only support naniting one mesh within a model
 		if (node->mesh) {
 			vkglTFMesh = node->mesh;
+			modelMatrix = node->getMatrix();
 			break;
 		}
 	}
@@ -56,8 +57,7 @@ void NaniteMesh::generateNaniteInfo() {
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
 	int clusterGroupNum = -1;
-	int lodLevel = 0;
-	int target = 2;
+	int target = 5;
 	do
 	{
 		// For each lod mesh
@@ -73,12 +73,17 @@ void NaniteMesh::generateNaniteInfo() {
 
 		// Mesh simplification
 		// TODO: Need to lock edge
-		/*meshLOD.lockClusterGroupBoundaries(mymesh);
-		meshLOD.simplifyMesh(mymesh);*/ 
+		meshLOD.lockClusterGroupBoundaries(mymesh);
+		meshLOD.simplifyMesh(mymesh); 
+		// Unlock all vertices
+		for (auto & v_it: mymesh.vertices()) {
+			mymesh.status(v_it).set_locked(false);
+		}
 		clusterGroupNum = meshLOD.clusterGroupNum;
-		std::cout << "LOD " << lodLevel++ << " generated" << std::endl;
+		std::cout << "LOD " << lodNums++ << " generated" << std::endl;
 
-	} while (false); // Only do one time for testing
+	//} while (clusterGroupNum != 1); 
+	} while (--target); // Only do one time for testing
 	//std::string output_filename = "output.obj";
 
 	//// Export the mesh to the specified file
@@ -86,5 +91,12 @@ void NaniteMesh::generateNaniteInfo() {
 	//	std::cerr << "Error exporting mesh to " << output_filename << std::endl;
 	//}
 	//} while (false); // Only do one time for testing
-	//} while (clusterGroupNum != 1); 
+}
+
+void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes) {
+	ASSERT(0, "Not implemented");
+}
+
+void packNaniteMeshesToIndexBuffer(const std::vector<NaniteMesh>& naniteMeshes, std::vector<uint32_t>& indexBuffer){
+
 }

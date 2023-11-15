@@ -107,6 +107,14 @@ void getScreenAABB(Cluster c, inout vec4 screenXY, inout float minZ)
     screenXY.zw = maxXY;
 }
 
+bool frustrumCulling(vec3 pos, mat4 currView, mat4 currProj)
+{
+    vec4 hpos = currProj * currView * vec4(pos,1.0);
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    return hpos.x>-1.1&&hpos.x<1.1&&hpos.y>-1.1&&hpos.y<1.1&&hpos.z>-1.1&&hpos.z<1.1;
+}
+
 void main()
 {
     uint index = gl_GlobalInvocationID.x;

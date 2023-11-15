@@ -80,6 +80,8 @@ public:
 	struct {
 		vks::Buffer object;
 		vks::Buffer skybox;
+		vks::Buffer topObject;
+		vks::Buffer topSkybox;
 		vks::Buffer params;
 	} uniformBuffers;
 
@@ -88,7 +90,7 @@ public:
 		glm::mat4 model;
 		glm::mat4 view;
 		glm::vec3 camPos;
-	} uboMatrices;
+	} uboMatrices1, uboMatrices2;
 
 	struct UBOCullingMatrices {
 		glm::mat4 model;
@@ -118,6 +120,8 @@ public:
 	struct {
 		VkDescriptorSet object;
 		VkDescriptorSet skybox;
+		VkDescriptorSet topObject;
+		VkDescriptorSet topSkybox;
 	} descriptorSets;
 
 	struct CullingPushConstants {
@@ -247,7 +251,6 @@ public:
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
-
 			
 
 			// Objects
@@ -261,11 +264,46 @@ public:
 			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-			//reducedModel.drawSimplifiedModel(drawCmdBuffers[i], 0, nullptr, 1);
-			//naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
+
+			/*
+			*	TOP VIEW
+			*/
+
+			VkClearRect clearRect = {};
+			clearRect.rect.offset = { 0, 0 };
+			clearRect.rect.extent = { width, height };
+			clearRect.baseArrayLayer = 0;
+			clearRect.layerCount = 1;
+
+			VkClearAttachment clearAttachment = {};
+			clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
+			clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
+
+			vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
+
+			VkViewport viewport1 = vks::initializers::viewport((float)width / 4.0f, (float)height / 4.0f, 0.0f, 1.0f);
+			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
+
+			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 4.0f, (float)height / 4.0f, 0.0f, 0.0f);
+			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
+			if (displaySkybox)
+			{
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.topSkybox, 0, NULL);
+				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+				models.skybox.draw(drawCmdBuffers[i]);
+			}
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.topObject, 0, NULL);
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+
 
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
+
+
 
 			/*
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
@@ -387,8 +425,8 @@ public:
 	{
 		// Descriptor Pool
 		std::vector<VkDescriptorPoolSize> poolSizes = {
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 16),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 8),
+			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 32),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 * (textures.hizbuffer.mipLevels - 1) + 1),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
@@ -398,7 +436,7 @@ public:
 		};
 		//TODO: calculate the exact maxsets here
 		VkDescriptorPoolCreateInfo descriptorPoolInfo =	vks::initializers::descriptorPoolCreateInfo(poolSizes, poolSizes.size());
-		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels - 2;
+		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels;
 		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
 
 		// Descriptor set layout
@@ -436,12 +474,35 @@ public:
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
 
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.topObject));
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.topObject.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
 		// Sky box
 		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.skybox));
 		writeDescriptorSets = {
 			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.skybox.descriptor),
 			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
 			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.environmentCube.descriptor),
+		};
+		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+
+		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.topSkybox));
+		writeDescriptorSets = {
+			vks::initializers::writeDescriptorSet(descriptorSets.topSkybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.topSkybox.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topSkybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
+			vks::initializers::writeDescriptorSet(descriptorSets.topSkybox, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.environmentCube.descriptor),
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
 
@@ -1798,14 +1859,26 @@ public:
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			&uniformBuffers.object,
-			sizeof(uboMatrices)));
+			sizeof(uboMatrices1)));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&uniformBuffers.topObject,
+			sizeof(uboMatrices1)));
 
 		// Skybox vertex shader uniform buffer
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			&uniformBuffers.skybox,
-			sizeof(uboMatrices)));
+			sizeof(uboMatrices1)));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			&uniformBuffers.topSkybox,
+			sizeof(uboMatrices1)));
 
 		// Shared parameter uniform buffer
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
@@ -1818,6 +1891,8 @@ public:
 		VK_CHECK_RESULT(uniformBuffers.object.map());
 		VK_CHECK_RESULT(uniformBuffers.skybox.map());
 		VK_CHECK_RESULT(uniformBuffers.params.map());
+		VK_CHECK_RESULT(uniformBuffers.topObject.map());
+		VK_CHECK_RESULT(uniformBuffers.topSkybox.map());
 
 		updateUniformBuffers();
 		updateParams();
@@ -1826,15 +1901,24 @@ public:
 	void updateUniformBuffers()
 	{
 		// 3D object
-		uboMatrices.projection = camera.matrices.perspective;
-		uboMatrices.view = camera.matrices.view;
-		uboMatrices.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		uboMatrices.camPos = camera.position * -1.0f;
-		memcpy(uniformBuffers.object.mapped, &uboMatrices, sizeof(uboMatrices));
+		uboMatrices1.projection = camera.matrices.perspective;
+		uboMatrices1.view = camera.matrices.view;
+		uboMatrices1.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		uboMatrices1.camPos = camera.position * -1.0f;
+		memcpy(uniformBuffers.object.mapped, &uboMatrices1, sizeof(uboMatrices1));
+
+		uboMatrices2.projection = camera.matrices.perspective;
+		uboMatrices2.view = glm::lookAt(glm::vec3(0, -5, 0), glm::vec3(0, 0, 0), glm::vec3(0, 0, -1));
+		uboMatrices2.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		uboMatrices2.camPos = camera.position * -1.0f;
+		memcpy(uniformBuffers.topObject.mapped, &uboMatrices2, sizeof(uboMatrices2));
 
 		// Skybox
-		uboMatrices.model = glm::mat4(glm::mat3(camera.matrices.view));
-		memcpy(uniformBuffers.skybox.mapped, &uboMatrices, sizeof(uboMatrices));
+		uboMatrices1.model = glm::mat4(glm::mat3(camera.matrices.view));
+		memcpy(uniformBuffers.skybox.mapped, &uboMatrices1, sizeof(uboMatrices1));
+
+		uboMatrices2.model = glm::mat4(glm::mat3(uboMatrices2.view));
+		memcpy(uniformBuffers.topSkybox.mapped, &uboMatrices2, sizeof(uboMatrices2));
 	}
 
 	void updateParams()

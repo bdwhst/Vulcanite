@@ -7,6 +7,11 @@ struct Cluster{
 
     uint32_t clusterGroupIndex;
     std::vector<uint32_t> triangleIndices;
+
+    // [triangleIndicesStart, triangleIndicesEnd) is the range of triangleIndicesSortedByClusterIdx
+    // left close, right open
+    uint32_t triangleIndicesStart; // Used to index Mesh::triangleIndicesSortedByClusterIdx
+    uint32_t triangleIndicesEnd; // Used to index Mesh::triangleIndicesSortedByClusterIdx
     
     std::vector<uint32_t> parentClusterIndices;
     std::vector<uint32_t> childClusterIndices;

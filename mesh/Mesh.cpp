@@ -102,6 +102,21 @@ void Mesh::generateCluster()
         cluster.mergeAABB(pMinWorld, pMaxWorld);  
     }
 
+
+    uint32_t currClusterIdx = -1;
+    for (size_t i = 0; i < triangleIndicesSortedByClusterIdx.size(); i++)
+    {
+        auto currTriangleIndex = triangleIndicesSortedByClusterIdx[i];
+        if (triangleClusterIndex[currTriangleIndex] != currClusterIdx)
+        {
+            if (currClusterIdx != -1)
+                clusters[currClusterIdx].triangleIndicesEnd = i;
+            currClusterIdx = triangleClusterIndex[currTriangleIndex];
+            clusters[currClusterIdx].triangleIndicesStart = i;
+        }
+    }
+    clusters[currClusterIdx].triangleIndicesEnd = triangleIndicesSortedByClusterIdx.size();
+
     //for (size_t i = 0; i < clusterNum; i++)
     //{
     //    std::cout << "Cluster id: " << i << " size: " << std::count(triangleClusterIndex.begin(), triangleClusterIndex.end(), i) << std::endl;

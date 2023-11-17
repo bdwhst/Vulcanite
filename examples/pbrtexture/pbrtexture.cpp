@@ -15,9 +15,10 @@
 #include "MeshHandler.h"
 #include "NaniteMesh.h"
 #include "Instance.h"
+#include "VulkanDescriptorSetManager.h"
 
 #define ENABLE_VALIDATION true
-
+VulkanDescriptorSetManager* VulkanDescriptorSetManager::instance = nullptr;
 class VulkanExample : public VulkanExampleBase
 {
 public:
@@ -168,6 +169,8 @@ public:
 		uniformBuffers.object.destroy();
 		uniformBuffers.skybox.destroy();
 		uniformBuffers.params.destroy();
+		uniformBuffers.topCube.destroy();
+		uniformBuffers.topSkybox.destroy();
 
 		textures.environmentCube.destroy();
 		textures.irradianceCube.destroy();
@@ -467,6 +470,26 @@ public:
 
 	void setupDescriptors()
 	{
+		/*
+		auto manager = VulkanDescriptorSetManager::getManager();
+		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings;
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 7),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 8),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
+		};
+		manager->addSetLayout("object", setLayoutBindings, 6);
+		*/
+
+
+		
 		// Descriptor Pool
 		std::vector<VkDescriptorPoolSize> poolSizes = {
 			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16),
@@ -674,6 +697,7 @@ public:
 			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.hizbuffer.descriptor),
 		};
 		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+		
 	}
 
 	void preparePipelines()

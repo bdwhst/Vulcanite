@@ -23,7 +23,7 @@ void VulkanDescriptorSetManager::createLayoutsAndSets(VkDevice device)
     this->device = device;
     if(descriptorSetLayouts.size()==descriptorSetLayoutBindings.size()) return;
     std::vector<VkDescriptorPoolSize> poolSizes;
-    std::unordered_map<int,int> typeCount;
+    std::unordered_map<VkDescriptorType,int> typeCount;
     uint32_t maxSets=0;
     for(const auto& [name, bindings]:descriptorSetLayoutBindings)
     {
@@ -34,7 +34,6 @@ void VulkanDescriptorSetManager::createLayoutsAndSets(VkDevice device)
             typeCount[binding.descriptorType] += numSets;
         }
     }
-    std::vector<VkDescriptorPoolSize> poolSizes;
     for(const auto& [type, count]:typeCount)
     {
         poolSizes.emplace_back(vks::initializers::descriptorPoolSize(type, count));
@@ -58,14 +57,16 @@ void VulkanDescriptorSetManager::createLayoutsAndSets(VkDevice device)
     }
 }
 
-void VulkanDescriptorSetManager::writeToSet(const std::string& layoutName, uint32_t set, VkDescriptorType type, uint32_t binding, VkDescriptorBufferInfo* buffer)
+void VulkanDescriptorSetManager::writeToSet(const std::string& layoutName, uint32_t set, uint32_t binding, VkDescriptorBufferInfo* buffer)
 {
+    auto type = descriptorSetLayoutBindings[layoutName].first[binding].descriptorType;
     auto writeSet = vks::initializers::writeDescriptorSet(descriptorSets[layoutName][set], type, binding, buffer);
     vkUpdateDescriptorSets(device, 1, &writeSet, 0, NULL);
 }
 
-void VulkanDescriptorSetManager::writeToSet(const std::string& layoutName, uint32_t set, VkDescriptorType type, uint32_t binding, VkDescriptorImageInfo* image)
+void VulkanDescriptorSetManager::writeToSet(const std::string& layoutName, uint32_t set, uint32_t binding, VkDescriptorImageInfo* image)
 {
+    auto type = descriptorSetLayoutBindings[layoutName].first[binding].descriptorType;
     auto writeSet = vks::initializers::writeDescriptorSet(descriptorSets[layoutName][set], type, binding, image);
     vkUpdateDescriptorSets(device, 1, &writeSet, 0, NULL);
 }

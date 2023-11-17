@@ -20,12 +20,15 @@ public:
         }
         return instance;
     }
-    static void destoryManager();
+    static void destoryManager()
+    {
+
+    }
     VulkanDescriptorSetManager(VulkanDescriptorSetManager const&) = delete;
     VulkanDescriptorSetManager& operator=(VulkanDescriptorSetManager const&) = delete;
     void addSetLayout(const std::string& layoutName, const std::vector<VkDescriptorSetLayoutBinding>& setBindings, uint32_t numSets = 1);
-    void createLayoutsAndSets();
-    void writeToSet(const std::string& layoutName, uint32_t set, VkDescriptorType type, uint32_t binding, VkDescriptorBufferInfo* buffer);
-    void writeToSet(const std::string& layoutName, uint32_t set, VkDescriptorType type, uint32_t binding, VkDescriptorImageInfo* image);
+    void createLayoutsAndSets(VkDevice device);
+    void writeToSet(const std::string& layoutName, uint32_t set, uint32_t binding, VkDescriptorBufferInfo* buffer);
+    void writeToSet(const std::string& layoutName, uint32_t set, uint32_t binding, VkDescriptorImageInfo* image);
     VkDescriptorSet getSet(const std::string& layoutName, uint32_t set);
 };

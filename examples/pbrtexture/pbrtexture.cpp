@@ -41,23 +41,15 @@ public:
 
 	std::vector<VkImageView> hizImageViews;
 
-	VkDescriptorSetLayout hizComputeDescriptorSetLayout;
-	std::vector<VkDescriptorSet> hizComputeDescriptorSets;
 	VkPipelineLayout hizComputePipelineLayout;
 	VkPipeline hizComputePipeline;
 
-	VkDescriptorSetLayout depthCopyDescriptorSetLayout;
-	VkDescriptorSet depthCopyDescriptorSet;
 	VkPipelineLayout depthCopyPipelineLayout;
 	VkPipeline depthCopyPipeline;
 
-	VkDescriptorSetLayout debugQuadDescriptorSetLayout;
-	VkDescriptorSet debugQuadDescriptorSet;
 	VkPipelineLayout debugQuadPipelineLayout;
 	VkPipeline debugQuadPipeline;
 
-	VkDescriptorSetLayout cullingDescriptorSetLayout;
-	VkDescriptorSet cullingDescriptorSet;
 	VkPipelineLayout cullingPipelineLayout;
 	VkPipeline cullingPipeline;
 
@@ -124,14 +116,6 @@ public:
 		VkPipeline pbr;
 	} pipelines;
 
-	struct {
-		VkDescriptorSet object;
-		VkDescriptorSet skybox;
-		VkDescriptorSet cube;
-		VkDescriptorSet topObject;
-		VkDescriptorSet topSkybox;
-		VkDescriptorSet topCube;
-	} descriptorSets;
 
 	struct CullingPushConstants {
 		int numClusters;
@@ -143,7 +127,6 @@ public:
 	vks::Buffer drawIndexedIndirectBuffer;
 
 	VkPipelineLayout pipelineLayout;
-	VkDescriptorSetLayout descriptorSetLayout;
 
 	VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
 	{
@@ -164,7 +147,7 @@ public:
 		vkDestroyPipeline(device, pipelines.pbr, nullptr);
 
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-		vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+		//vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
 		uniformBuffers.object.destroy();
 		uniformBuffers.skybox.destroy();
@@ -196,6 +179,7 @@ public:
 	void buildCommandBuffers()
 	{
 		VkCommandBufferBeginInfo cmdBufInfo = vks::initializers::commandBufferBeginInfo();
+		auto descManager = VulkanDescriptorSetManager::getManager();
 
 		VkClearValue clearValues[2];
 		clearValues[0].color = { { 0.1f, 0.1f, 0.1f, 1.0f } };
@@ -234,7 +218,7 @@ public:
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
 			cullingPushConstants.numClusters = clusterinfos.size();
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &cullingDescriptorSet, 0, 0);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &descManager->getSet("culling", 0), 0, 0);
 			vkCmdDispatch(drawCmdBuffers[i], (cullingPushConstants.numClusters + 31) / 32, 1, 1);
 
 			imageMemBarrier.image = textures.hizbuffer.image;
@@ -283,14 +267,14 @@ public:
 			// Skybox
 			if (displaySkybox)
 			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.skybox, 0, NULL);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 4), 0, NULL);
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
 
 
 			// Objects
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.object, 0, NULL);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 0), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 			//models.object.draw(drawCmdBuffers[i]);
 
@@ -300,7 +284,7 @@ public:
 			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.cube, 0, NULL);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
 			models.cube.draw(drawCmdBuffers[i]);
 
 
@@ -327,18 +311,18 @@ public:
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
 			if (displaySkybox)
 			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.topSkybox, 0, NULL);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.topObject, 0, NULL);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
 			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets.topCube, 0, NULL);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
 			models.cube.draw(drawCmdBuffers[i]);
 
 
@@ -366,7 +350,7 @@ public:
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &depthCopyDescriptorSet, 0, 0);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &descManager->getSet("depthCopy", 0), 0, 0);
 			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
@@ -386,7 +370,7 @@ public:
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
 			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
 			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &hizComputeDescriptorSets[j], 0, 0);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &descManager->getSet("hizBuild", j), 0, 0);
 				vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
 				imageMemBarrier.image = textures.hizbuffer.image;
@@ -402,8 +386,8 @@ public:
 				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			}
 
-			/*
-				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			
+				/*imageMemBarrier = vks::initializers::imageMemoryBarrier();
 				imageMemBarrier.image = textures.hizbuffer.image;
 				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -421,7 +405,7 @@ public:
 				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &debugQuadDescriptorSet, 0, NULL);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &descManager->getSet("debugQuad", 0), 0, NULL);
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
 				vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 				vkCmdEndRenderPass(drawCmdBuffers[i]);
@@ -436,8 +420,8 @@ public:
 				imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
 				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 				imageMemBarrier.subresourceRange.layerCount = 1;
-				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-			*/
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);*/
+			
 
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
@@ -470,7 +454,7 @@ public:
 
 	void setupDescriptors()
 	{
-		/*
+		
 		auto manager = VulkanDescriptorSetManager::getManager();
 		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings;
 		setLayoutBindings = {
@@ -485,18 +469,18 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 8),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
 		};
-		manager->addSetLayout("object", setLayoutBindings, 6);
+		manager->addSetLayout("objectDraw", setLayoutBindings, 6);
 
 		setLayoutBindings = {
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1),
 		};
-		manager->addSetLayout("hiz", setLayoutBindings, textures.hizbuffer.mipLevels - 1);
+		manager->addSetLayout("hizBuild", setLayoutBindings, textures.hizbuffer.mipLevels - 1);
 
 		setLayoutBindings = {
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
 		};
-		manager->addSetLayout("debugquad", setLayoutBindings, 1);
+		manager->addSetLayout("debugQuad", setLayoutBindings, 1);
 
 		setLayoutBindings = {
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
@@ -513,174 +497,85 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5)
 		};
 		manager->addSetLayout("culling", setLayoutBindings, 1);
-		*/
-
-		
-		// Descriptor Pool
-		std::vector<VkDescriptorPoolSize> poolSizes = {
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 16),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 64),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 2 * (textures.hizbuffer.mipLevels - 1) + 1),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 4),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1),
-			vks::initializers::descriptorPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1),
-		};
-		//TODO: calculate the exact maxsets here
-		VkDescriptorPoolCreateInfo descriptorPoolInfo =	vks::initializers::descriptorPoolCreateInfo(poolSizes, poolSizes.size());
-		descriptorPoolInfo.maxSets += textures.hizbuffer.mipLevels + 2;
-		VK_CHECK_RESULT(vkCreateDescriptorPool(device, &descriptorPoolInfo, nullptr, &descriptorPool));
-
-		// Descriptor set layout
-		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 7),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 8),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
-		};
-		VkDescriptorSetLayoutCreateInfo descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &descriptorSetLayout));
-
-		// Descriptor sets
-		VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &descriptorSetLayout, 1);
-
-		// Objects
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.object));
-		std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.object.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.object, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.topObject));
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.topObject.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topObject, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-
-		//Cube
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.cube));
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.cube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.cube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.topCube));
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.topCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.irradianceCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3, &textures.lutBrdf.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 4, &textures.prefilteredCube.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.albedoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6, &textures.normalMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 7, &textures.aoMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8, &textures.metallicMap.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topCube, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9, &textures.roughnessMap.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
 
 
-		// Sky box
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.skybox));
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.skybox.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.skybox, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.environmentCube.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+		manager->createLayoutsAndSets(device);
 
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSets.topSkybox));
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(descriptorSets.topSkybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 0, &uniformBuffers.topSkybox.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topSkybox, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, &uniformBuffers.params.descriptor),
-			vks::initializers::writeDescriptorSet(descriptorSets.topSkybox, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2, &textures.environmentCube.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+		//Object camera view
+		manager->writeToSet("objectDraw", 0, 0, &uniformBuffers.object.descriptor);
+		manager->writeToSet("objectDraw", 0, 1, &uniformBuffers.params.descriptor);
+		manager->writeToSet("objectDraw", 0, 2, &textures.irradianceCube.descriptor);
+		manager->writeToSet("objectDraw", 0, 3, &textures.lutBrdf.descriptor);
+		manager->writeToSet("objectDraw", 0, 4, &textures.prefilteredCube.descriptor);
+		manager->writeToSet("objectDraw", 0, 5, &textures.albedoMap.descriptor);
+		manager->writeToSet("objectDraw", 0, 6, &textures.normalMap.descriptor);
+		manager->writeToSet("objectDraw", 0, 7, &textures.aoMap.descriptor);
+		manager->writeToSet("objectDraw", 0, 8, &textures.metallicMap.descriptor);
+		manager->writeToSet("objectDraw", 0, 9, &textures.roughnessMap.descriptor);
 
-		// Hi-z building
-		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1),
-		};
+		//Object top view
+		manager->writeToSet("objectDraw", 1, 0, &uniformBuffers.topObject.descriptor);
+		manager->writeToSet("objectDraw", 1, 1, &uniformBuffers.params.descriptor);
+		manager->writeToSet("objectDraw", 1, 2, &textures.irradianceCube.descriptor);
+		manager->writeToSet("objectDraw", 1, 3, &textures.lutBrdf.descriptor);
+		manager->writeToSet("objectDraw", 1, 4, &textures.prefilteredCube.descriptor);
+		manager->writeToSet("objectDraw", 1, 5, &textures.albedoMap.descriptor);
+		manager->writeToSet("objectDraw", 1, 6, &textures.normalMap.descriptor);
+		manager->writeToSet("objectDraw", 1, 7, &textures.aoMap.descriptor);
+		manager->writeToSet("objectDraw", 1, 8, &textures.metallicMap.descriptor);
+		manager->writeToSet("objectDraw", 1, 9, &textures.roughnessMap.descriptor);
 
-		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &hizComputeDescriptorSetLayout));
+		//Cube camera view
+		manager->writeToSet("objectDraw", 2, 0, &uniformBuffers.cube.descriptor);
+		manager->writeToSet("objectDraw", 2, 1, &uniformBuffers.params.descriptor);
+		manager->writeToSet("objectDraw", 2, 2, &textures.irradianceCube.descriptor);
+		manager->writeToSet("objectDraw", 2, 3, &textures.lutBrdf.descriptor);
+		manager->writeToSet("objectDraw", 2, 4, &textures.prefilteredCube.descriptor);
+		manager->writeToSet("objectDraw", 2, 5, &textures.albedoMap.descriptor);
+		manager->writeToSet("objectDraw", 2, 6, &textures.normalMap.descriptor);
+		manager->writeToSet("objectDraw", 2, 7, &textures.aoMap.descriptor);
+		manager->writeToSet("objectDraw", 2, 8, &textures.metallicMap.descriptor);
+		manager->writeToSet("objectDraw", 2, 9, &textures.roughnessMap.descriptor);
+
+		//Cube top view
+		manager->writeToSet("objectDraw", 3, 0, &uniformBuffers.topCube.descriptor);
+		manager->writeToSet("objectDraw", 3, 1, &uniformBuffers.params.descriptor);
+		manager->writeToSet("objectDraw", 3, 2, &textures.irradianceCube.descriptor);
+		manager->writeToSet("objectDraw", 3, 3, &textures.lutBrdf.descriptor);
+		manager->writeToSet("objectDraw", 3, 4, &textures.prefilteredCube.descriptor);
+		manager->writeToSet("objectDraw", 3, 5, &textures.albedoMap.descriptor);
+		manager->writeToSet("objectDraw", 3, 6, &textures.normalMap.descriptor);
+		manager->writeToSet("objectDraw", 3, 7, &textures.aoMap.descriptor);
+		manager->writeToSet("objectDraw", 3, 8, &textures.metallicMap.descriptor);
+		manager->writeToSet("objectDraw", 3, 9, &textures.roughnessMap.descriptor);
+
+		//Skybox camera view
+		manager->writeToSet("objectDraw", 4, 0, &uniformBuffers.skybox.descriptor);
+		manager->writeToSet("objectDraw", 4, 1, &uniformBuffers.params.descriptor);
+		manager->writeToSet("objectDraw", 4, 2, &textures.environmentCube.descriptor);
+
+		//Skybox top view
+		manager->writeToSet("objectDraw", 5, 0, &uniformBuffers.topSkybox.descriptor);
+		manager->writeToSet("objectDraw", 5, 1, &uniformBuffers.params.descriptor);
+		manager->writeToSet("objectDraw", 5, 2, &textures.environmentCube.descriptor);
+
+		//Hiz building
 		for (int i = 0; i < textures.hizbuffer.mipLevels - 1; i++)
 		{
-			VkDescriptorSet descriptorSet;
-			VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &hizComputeDescriptorSetLayout, 1);
-			VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet));
-			//;
 			VkDescriptorImageInfo inputImageInfo = {};
 			inputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 			inputImageInfo.imageView = hizImageViews[i];
 			VkDescriptorImageInfo outputImageInfo = {};
 			outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 			outputImageInfo.imageView = hizImageViews[i + 1];
-			std::vector<VkWriteDescriptorSet> writeDescriptorSets = {
-				vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 0, &inputImageInfo),
-				vks::initializers::writeDescriptorSet(descriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, &outputImageInfo)
-			};
-			vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-			hizComputeDescriptorSets.emplace_back(descriptorSet);
+			manager->writeToSet("hizBuild", i, 0, &inputImageInfo);
+			manager->writeToSet("hizBuild", i, 1, &outputImageInfo);
 		}
 
-		// Draw quad
-		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
-		};
-		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &debugQuadDescriptorSetLayout));
-		allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &debugQuadDescriptorSetLayout, 1);
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &debugQuadDescriptorSet));
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(debugQuadDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &textures.hizbuffer.descriptor)
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-		
-		// Depth Copy
-		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1)
-		};
-		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &depthCopyDescriptorSetLayout));
-		allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &depthCopyDescriptorSetLayout, 1);
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &depthCopyDescriptorSet));
+		//Debug quad 
+		manager->writeToSet("debugQuad", 0, 0, &textures.hizbuffer.descriptor);
+
+		//Depth copy
 		VkDescriptorImageInfo depthImageInfo = {};
 		depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		depthImageInfo.imageView = depthStencil.view;
@@ -688,25 +583,10 @@ public:
 		VkDescriptorImageInfo outputImageInfo = {};
 		outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		outputImageInfo.imageView = hizImageViews[0];
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(depthCopyDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 0, &depthImageInfo),
-			vks::initializers::writeDescriptorSet(depthCopyDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, &outputImageInfo)
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
+		manager->writeToSet("depthCopy", 0, 0, &depthImageInfo);
+		manager->writeToSet("depthCopy", 0, 1, &outputImageInfo);
 
 		//Culling
-		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5)
-		};
-		descriptorLayoutCI = vks::initializers::descriptorSetLayoutCreateInfo(setLayoutBindings);
-		VK_CHECK_RESULT(vkCreateDescriptorSetLayout(device, &descriptorLayoutCI, nullptr, &cullingDescriptorSetLayout));
-		allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &cullingDescriptorSetLayout, 1);
-		VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &cullingDescriptorSet));
 		clustersInfoBuffer.setupDescriptor();
 		culledIndicesBuffer.setupDescriptor();
 		drawIndexedIndirectBuffer.setupDescriptor();
@@ -714,16 +594,12 @@ public:
 		VkDescriptorBufferInfo inputIndicesInfo{};
 		inputIndicesInfo.buffer = instance1.referenceMesh->sortedIndices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
-		writeDescriptorSets = {
-			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 0, &clustersInfoBuffer.descriptor),
-			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, &inputIndicesInfo),
-			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2, &culledIndicesBuffer.descriptor),
-			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 3, &drawIndexedIndirectBuffer.descriptor),
-			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 4, &cullingUniformBuffer.descriptor),
-			vks::initializers::writeDescriptorSet(cullingDescriptorSet, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5, &textures.hizbuffer.descriptor),
-		};
-		vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, NULL);
-		
+		manager->writeToSet("culling", 0, 0, &clustersInfoBuffer.descriptor);
+		manager->writeToSet("culling", 0, 1, &inputIndicesInfo);
+		manager->writeToSet("culling", 0, 2, &culledIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 3, &drawIndexedIndirectBuffer.descriptor);
+		manager->writeToSet("culling", 0, 4, &cullingUniformBuffer.descriptor);
+		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
 	}
 
 	void preparePipelines()
@@ -739,8 +615,10 @@ public:
 		VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
 		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
 
+
+		auto descManager = VulkanDescriptorSetManager::getManager();
 		// Pipeline layout
-		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descriptorSetLayout, 1);
+		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("objectDraw"), 1);
 		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
 		// Pipelines
@@ -781,7 +659,7 @@ public:
 
 		{
 			// Debug Draw Quad pipeline
-			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&debugQuadDescriptorSetLayout, 1);
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("debugQuad"), 1);
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &debugQuadPipelineLayout));
 			pipelineCI.layout = debugQuadPipelineLayout;
 			depthStencilState.depthWriteEnable = VK_FALSE;
@@ -803,7 +681,7 @@ public:
 			// Hi-Z Buffer build pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/genhiz.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
 
-			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&hizComputeDescriptorSetLayout, 1);
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("hizBuild"), 1);
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &hizComputePipelineLayout));
 
 			VkComputePipelineCreateInfo pipelineCreateInfo = {};
@@ -817,7 +695,7 @@ public:
 			// Depth copy pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/depthcopy.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
 
-			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&depthCopyDescriptorSetLayout, 1);
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("depthCopy"), 1);
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &depthCopyPipelineLayout));
 
 			VkComputePipelineCreateInfo pipelineCreateInfo = {};
@@ -831,9 +709,9 @@ public:
 			// Culling pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/culling.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
 			VkPushConstantRange push_constant{};
-			push_constant.size=sizeof(CullingPushConstants);
+			push_constant.size = sizeof(CullingPushConstants);
 			push_constant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&cullingDescriptorSetLayout, 1);
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("culling"), 1);
 			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
 			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &cullingPipelineLayout));

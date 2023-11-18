@@ -30,5 +30,6 @@ public:
     void createLayoutsAndSets(VkDevice device);
     void writeToSet(const std::string& layoutName, uint32_t set, uint32_t binding, VkDescriptorBufferInfo* buffer);
     void writeToSet(const std::string& layoutName, uint32_t set, uint32_t binding, VkDescriptorImageInfo* image);
-    VkDescriptorSet getSet(const std::string& layoutName, uint32_t set);
+    const VkDescriptorSet& getSet(const std::string& layoutName, uint32_t set);
+    const VkDescriptorSetLayout& getSetLayout(const std::string& layoutName);
 };

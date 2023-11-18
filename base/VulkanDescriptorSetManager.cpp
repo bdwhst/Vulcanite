@@ -53,6 +53,7 @@ void VulkanDescriptorSetManager::createLayoutsAndSets(VkDevice device)
             VkDescriptorSet set;
             VkDescriptorSetAllocateInfo allocInfo = vks::initializers::descriptorSetAllocateInfo(descriptorPool, &setLayout, 1);
             VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, &set));
+            descriptorSets[name].emplace_back(set);
         }
     }
 }
@@ -71,12 +72,21 @@ void VulkanDescriptorSetManager::writeToSet(const std::string& layoutName, uint3
     vkUpdateDescriptorSets(device, 1, &writeSet, 0, NULL);
 }
 
-VkDescriptorSet VulkanDescriptorSetManager::getSet(const std::string& layoutName, uint32_t set)
+const VkDescriptorSet& VulkanDescriptorSetManager::getSet(const std::string& layoutName, uint32_t set)
 {
     if(!descriptorSets.count(layoutName))
     {
         throw std::runtime_error("ERROR: Invalid set name");
     }
     return descriptorSets[layoutName][set];
+}
+
+const VkDescriptorSetLayout& VulkanDescriptorSetManager::getSetLayout(const std::string& layoutName)
+{
+    if (!descriptorSetLayouts.count(layoutName))
+    {
+        throw std::runtime_error("ERROR: Invalid layout name");
+    }
+    return descriptorSetLayouts[layoutName];
 }
 

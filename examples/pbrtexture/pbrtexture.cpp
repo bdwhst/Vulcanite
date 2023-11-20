@@ -286,7 +286,12 @@ public:
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
-			models.cube.draw(drawCmdBuffers[i]);
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+			naniteMesh.meshes[naniteMesh.meshes.size() - 1].draw(drawCmdBuffers[i], 0, nullptr, 1);
+
+
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
+			//models.cube.draw(drawCmdBuffers[i]);
 
 
 			/*
@@ -305,10 +310,10 @@ public:
 
 			vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
 
-			VkViewport viewport1 = vks::initializers::viewport((float)width / 3.0f, (float)width / 3.0f, 0.0f, 1.0f);
+			VkViewport viewport1 = vks::initializers::viewport((float)width / 2.0f, (float)height / 2.0f, 0.0f, 1.0f);
 			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
 
-			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 3.0f, (float)width / 3.0f, 0.0f, 0.0f);
+			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 2.0f, (float)height / 2.0f, 0.0f, 0.0f);
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
 			if (displaySkybox)
 			{
@@ -437,10 +442,10 @@ public:
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
 		naniteMesh.loadvkglTFModel(models.object);
 		naniteMesh.generateNaniteInfo();
-		naniteMesh.meshes[0].initVertexBuffer();
-		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
-		naniteMesh.meshes[0].createSortedIndexBuffer(vulkanDevice, queue);
-		instance1 = Instance(&naniteMesh.meshes[0], model0);
+		naniteMesh.meshes[naniteMesh.meshes.size()-1].initVertexBuffer();
+		naniteMesh.meshes[naniteMesh.meshes.size()-1].createVertexBuffer(vulkanDevice, queue);
+		naniteMesh.meshes[naniteMesh.meshes.size()-1].createSortedIndexBuffer(vulkanDevice, queue);
+		instance1 = Instance(&naniteMesh.meshes[naniteMesh.meshes.size()-1], model0);
 		instance1.buildClusterInfo();
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);

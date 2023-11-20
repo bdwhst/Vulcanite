@@ -57,40 +57,72 @@ void NaniteMesh::generateNaniteInfo() {
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
 	int clusterGroupNum = -1;
-	int target = 1;
+	int target = 3;
+	int currFaceNum = -1;
+	//if (!OpenMesh::IO::read_mesh(mymesh, "D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny.obj")) {
+	//	ASSERT(0, "failed to load mesh");
+	//}
+	// Add a customized property to store clusterGroupIndex of last level of detail
+	mymesh.add_property(clusterGroupIndexPropHandle);
 	do
 	{
 		// For each lod mesh
 		Mesh meshLOD;
 		meshLOD.mesh = mymesh;
-		meshLOD.buildTriangleGraph();
-		meshLOD.generateCluster();
+		meshLOD.clusterGroupIndexPropHandle = clusterGroupIndexPropHandle;
+		if (clusterGroupNum > 0) {
+			meshLOD.oldClusterGroups.resize(clusterGroupNum);
+			meshLOD.assignTriangleClusterGroup();
+		}
+		else {
+			meshLOD.buildTriangleGraph();
+			meshLOD.generateCluster();
+		}
+		if (meshes.size() > 0) {
+			auto lastMeshLOD = meshes[meshes.size() - 1];
+			// Maintain DAG
+		}
 		// Generate cluster group by partitioning cluster graph
 		meshLOD.buildClusterGraph();
 		meshLOD.colorClusterGraph(); // Cluster graph is needed to assign adjacent cluster different colors
 		meshLOD.generateClusterGroup();
+		currFaceNum = meshLOD.mesh.n_faces();
+		clusterGroupNum = meshLOD.clusterGroupNum;
 		meshes.push_back(meshLOD);
 
-		// Mesh simplification
-		// TODO: Need to lock edge
-		//meshLOD.lockClusterGroupBoundaries(mymesh);
-		//meshLOD.simplifyMesh(mymesh); 
-		// Unlock all vertices
-		for (auto & v_it: mymesh.vertices()) {
-			mymesh.status(v_it).set_locked(false);
+		mymesh = meshLOD.mesh;
+		if (clusterGroupNum > 1) 
+		{
+			meshLOD.simplifyMesh(mymesh); 
+			// Save LOD mesh for debugging
+			//{
+			//	std::string output_filename = "meshLOD_" + std::to_string(lodNums) + ".obj";
+			//
+			//	// Export the mesh to the specified file
+			//	if (!OpenMesh::IO::write_mesh(mymesh, output_filename)) {
+			//		std::cerr << "Error exporting mesh to " << output_filename << std::endl;
+			//	}
+			//}
 		}
-		clusterGroupNum = meshLOD.clusterGroupNum;
 		std::cout << "LOD " << lodNums++ << " generated" << std::endl;
 
-	//} while (clusterGroupNum != 1); 
-	} while (--target); // Only do one time for testing
-	//std::string output_filename = "output.obj";
+	} 
+	//while (clusterGroupNum != 1 &&
+	//  mymesh.n_faces() != currFaceNum // Decimation no longer decrease faces
+	//); 
+	while (--target); // Only do one time for testing
 
-	//// Export the mesh to the specified file
-	//if (!OpenMesh::IO::write_mesh(mymesh, output_filename)) {
-	//	std::cerr << "Error exporting mesh to " << output_filename << std::endl;
+	// Linearize DAG
+	
+	// Save mesh for debugging
+	//{
+	//	std::string output_filename = "output.obj";
+	//
+	//	// Export the mesh to the specified file
+	//	if (!OpenMesh::IO::write_mesh(mymesh, output_filename)) {
+	//		std::cerr << "Error exporting mesh to " << output_filename << std::endl;
+	//	}
 	//}
-	//} while (false); // Only do one time for testing
 }
 
 void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes) {

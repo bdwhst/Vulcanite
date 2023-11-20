@@ -162,6 +162,7 @@ struct NaniteMesh{
 };
 ```
 
+11.15
 Steps
 - [x] Implement `Mesh` class. Generate cluster/cluster group index for lod0
 - [x] Implement `Cluster` & `ClusterGroup` class
@@ -169,3 +170,22 @@ Steps
 - [ ] Lock edges
 - [ ] Consider refreshing cmd buffer to see clustering of each lod
 - [ ] Build DAG/BVH for nanite infos.
+	- Before simplification:
+	- [ ] We need to store the ~~vertex~~ half-edge handles of boundaries (so that we know which face is inside)
+		- [ ] This is based on the assumption that handles will still be valid after simplification
+		- [ ] If we find out that handles turn out to be invalid in some cases?
+			- [ ] Consider storing an extra attribute that represents the cluster group
+	- After simplification:
+	- [ ] With all the boundaries, we can now do a simple graph traversal
+	- [ ] We need to build triangle graph first for the simplified mesh
+		- [ ] Simply use non-recursive BFS
+- [ ] Serialize
+	- Consider
+	- [ ] protobuf (High priority)
+	- [ ] boost (Low priority)
+
+
+11.18
+- Bad News: We may use the wrong clustering step.
+	- Do clustering within each cluster group.
+	- How to do decimation within one cluster group?

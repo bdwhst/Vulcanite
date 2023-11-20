@@ -90,3 +90,4 @@ const VkDescriptorSetLayout& VulkanDescriptorSetManager::getSetLayout(const std:
     return descriptorSetLayouts[layoutName];
 }
 
+VulkanDescriptorSetManager* VulkanDescriptorSetManager::instance = nullptr;

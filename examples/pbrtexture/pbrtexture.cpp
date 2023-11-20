@@ -18,7 +18,7 @@
 #include "VulkanDescriptorSetManager.h"
 
 #define ENABLE_VALIDATION true
-VulkanDescriptorSetManager* VulkanDescriptorSetManager::instance = nullptr;
+
 class VulkanExample : public VulkanExampleBase
 {
 public:
@@ -147,6 +147,7 @@ public:
 		vkDestroyPipeline(device, pipelines.pbr, nullptr);
 
 		vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+		VulkanDescriptorSetManager::getManager()->destory();
 		//vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
 		uniformBuffers.object.destroy();

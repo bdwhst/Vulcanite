@@ -20,9 +20,16 @@ public:
         }
         return instance;
     }
-    static void destoryManager()
+    static void destory()
     {
-
+        if (instance)
+        {
+            for (auto [_, layout] : instance->descriptorSetLayouts)
+            {
+                vkDestroyDescriptorSetLayout(instance->device, layout, nullptr);
+            }
+            vkDestroyDescriptorPool(instance->device, instance->descriptorPool, nullptr);
+        }
     }
     VulkanDescriptorSetManager(VulkanDescriptorSetManager const&) = delete;
     VulkanDescriptorSetManager& operator=(VulkanDescriptorSetManager const&) = delete;

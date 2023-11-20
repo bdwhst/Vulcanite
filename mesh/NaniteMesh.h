@@ -9,6 +9,7 @@ struct NaniteMesh {
 	uint32_t lodNums = 0;
 	glm::mat4 modelMatrix;
 	std::vector<Mesh> meshes;
+	OpenMesh::HPropHandleT<int32_t> clusterGroupIndexPropHandle;
 
 	/************ Load Mesh *************/
 	// Load from vkglTF

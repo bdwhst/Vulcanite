@@ -1,6 +1,7 @@
 set(headers
     "Cluster.h"
     "ClusterGroup.h"
+    "Common.h"
     "MeshHandler.h"
     "Mesh.h"
     "NaniteMesh.h"
@@ -13,6 +14,7 @@ set(sources
     "meshTest.cpp"
     "Cluster.cpp"
     "ClusterGroup.cpp"
+    "Common.cpp"
     "Mesh.cpp"
     "MeshHandler.cpp"
     "NaniteMesh.cpp"

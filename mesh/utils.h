@@ -2,7 +2,6 @@
 #include <iostream>
 #include <cassert>
 #include <glm/glm.hpp>
-#include "Mesh.h"
 
 #define ASSERT(condition, message) \
     do { \

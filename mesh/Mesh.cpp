@@ -440,6 +440,21 @@ void Mesh::initVertexBuffer(){
     }
 }
 
+
+void Mesh::initUniqueVertexBuffer() {
+    for (const auto & vertex: mesh.vertices())
+    {
+        vkglTF::Vertex v;
+        v.pos = glm::vec3(mesh.point(vertex)[0], mesh.point(vertex)[1], mesh.point(vertex)[2]);
+        v.normal = glm::vec3(mesh.normal(vertex)[0], mesh.normal(vertex)[1], mesh.normal(vertex)[2]);
+        v.uv = glm::vec2(mesh.texcoord2D(vertex)[0], mesh.texcoord2D(vertex)[1]);
+        v.joint0 = glm::vec4(0.0f);
+        v.weight0 = glm::vec4(0.0f);
+        uniqueVertexBuffer.push_back(v);
+    }
+}
+
+
 void Mesh::createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) {
     size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
     vertices.count = static_cast<uint32_t>(vertexBuffer.size());
@@ -477,6 +492,51 @@ void Mesh::createVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) 
 
     copyRegion.size = vertexBufferSize;
     vkCmdCopyBuffer(copyCmd, vertexStaging.buffer, vertices.buffer, 1, &copyRegion);
+
+    device->flushCommandBuffer(copyCmd, transferQueue, true);
+
+    vkDestroyBuffer(device->logicalDevice, vertexStaging.buffer, nullptr);
+    vkFreeMemory(device->logicalDevice, vertexStaging.memory, nullptr);
+}
+
+
+void Mesh::createUniqueVertexBuffer(vks::VulkanDevice* device, VkQueue transferQueue) {
+    size_t vertexBufferSize = uniqueVertexBuffer.size() * sizeof(vkglTF::Vertex);
+    uniqueVertices.count = static_cast<uint32_t>(uniqueVertexBuffer.size());
+
+    assert(vertexBufferSize > 0);
+
+    struct StagingBuffer {
+        VkBuffer buffer;
+        VkDeviceMemory memory;
+    } vertexStaging;
+
+    // Create staging buffers
+    // Vertex data
+    VK_CHECK_RESULT(device->createBuffer(
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        vertexBufferSize,
+        &vertexStaging.buffer,
+        &vertexStaging.memory,
+        uniqueVertexBuffer.data()));
+
+    // Create device local buffers
+    // Vertex buffer
+    VK_CHECK_RESULT(device->createBuffer(
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        vertexBufferSize,
+        &uniqueVertices.buffer,
+        &uniqueVertices.memory));
+
+    // Copy from staging buffers
+    VkCommandBuffer copyCmd = device->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+    VkBufferCopy copyRegion = {};
+
+    copyRegion.size = vertexBufferSize;
+    vkCmdCopyBuffer(copyCmd, vertexStaging.buffer, uniqueVertices.buffer, 1, &copyRegion);
 
     device->flushCommandBuffer(copyCmd, transferQueue, true);
 

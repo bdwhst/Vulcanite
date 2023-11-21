@@ -279,18 +279,20 @@ public:
 			//models.object.draw(drawCmdBuffers[i]);
 
 			//TODO: support multiple primitives in a model
-			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &naniteMesh.meshes[naniteMesh.meshes.size() - 1].uniqueVertices.buffer, offsets);
+
 			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-			naniteMesh.meshes[naniteMesh.meshes.size() - 1].draw(drawCmdBuffers[i], 0, nullptr, 1);
-
-
 			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
-			//models.cube.draw(drawCmdBuffers[i]);
+			//vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+			//naniteMesh.meshes[naniteMesh.meshes.size() - 1].draw(drawCmdBuffers[i], 0, nullptr, 1);
+
+
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
+			models.cube.draw(drawCmdBuffers[i]);
 
 
 			/*
@@ -322,9 +324,9 @@ public:
 			}
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &naniteMesh.meshes[naniteMesh.meshes.size() - 1].uniqueVertices.buffer, offsets);
 			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
 			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
@@ -442,7 +444,9 @@ public:
 		naniteMesh.loadvkglTFModel(models.object);
 		naniteMesh.generateNaniteInfo();
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].initVertexBuffer();
+		naniteMesh.meshes[naniteMesh.meshes.size()-1].initUniqueVertexBuffer();
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].createVertexBuffer(vulkanDevice, queue);
+		naniteMesh.meshes[naniteMesh.meshes.size()-1].createUniqueVertexBuffer(vulkanDevice, queue);
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].createSortedIndexBuffer(vulkanDevice, queue);
 		instance1 = Instance(&naniteMesh.meshes[naniteMesh.meshes.size()-1], model0);
 		instance1.buildClusterInfo();
@@ -1758,6 +1762,7 @@ public:
 		drawIndexedIndirect.firstIndex = 0;
 		drawIndexedIndirect.firstInstance = 0;
 		drawIndexedIndirect.indexCount = models.object.indexBuffer.size();
+		//drawIndexedIndirect.indexCount = naniteMesh.meshes[naniteMesh.meshes.size()-1].mesh.n_faces();
 		drawIndexedIndirect.instanceCount = 1;
 		drawIndexedIndirect.vertexOffset = 0;
 

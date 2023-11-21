@@ -129,17 +129,17 @@ vec3 calculateNormal()
 
 void main()
 {		
-	int clusterId = int(inClusterInfos.w);
-	vec3 clusterColor = inClusterInfos.xyz;
-	// Only set this for convenience, no physical meaning
-	if (uboParams.gamma < 2.15){
-		outColor = vec4(inClusterGroupInfos.xyz, 1.0); // Uncomment this line to see Cluster visualization
-	}
-	else{
-		outColor = vec4(inClusterInfos.xyz, 1.0); // Uncomment this line to see ClusterGroup visualization
-	}
-	//outColor = vec4(1.0);
-	return;
+	//int clusterId = int(inClusterInfos.w);
+	//vec3 clusterColor = inClusterInfos.xyz;
+	//// Only set this for convenience, no physical meaning
+	//if (uboParams.gamma < 2.15){
+	//	outColor = vec4(inClusterGroupInfos.xyz, 1.0); // Uncomment this line to see Cluster visualization
+	//}
+	//else{
+	//	outColor = vec4(inClusterInfos.xyz, 1.0); // Uncomment this line to see ClusterGroup visualization
+	//}
+	////outColor = vec4(1.0);
+	//return;
 	//vec3 N = calculateNormal();
 	vec3 N = inNormal;
 

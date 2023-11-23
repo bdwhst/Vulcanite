@@ -140,7 +140,7 @@ void main()
     float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
     float maxHiz = max(max(z1,z2),max(z3,z4));
     if(minZ>maxHiz+0.02) culled = true;
-    culled = true;
+    //culled = true;
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;

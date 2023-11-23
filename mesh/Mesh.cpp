@@ -1,7 +1,11 @@
 #include "Mesh.h"
 
-void Mesh::assignTriangleClusterGroup()
+void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
 {
+    for (int i = 0; i < lastLOD.clusterGroups.size(); i++)
+    {
+        oldClusterGroups[i].clusterIndices = lastLOD.clusterGroups[i].clusterIndices;
+    }
     for (const auto & heh: mesh.halfedges())
     {
         if (mesh.is_boundary(heh)) continue;
@@ -20,14 +24,22 @@ void Mesh::assignTriangleClusterGroup()
         oldClusterGroup.buildLocalTriangleGraph();
         oldClusterGroup.generateLocalClusters();
 
+        std::unordered_set<uint32_t> newClusterIndicesSet;
+        
         // Merging local cluster indices to global cluster indices
         for (const auto & fh: oldClusterGroup.clusterGroupFaces)
         {
             auto localTriangleIdx = oldClusterGroup.triangleIndicesGlobalLocalMap[fh.idx()];
             ASSERT(triangleClusterIndex[fh.idx()] < 0, "Repeat clsutering");
-
-            triangleClusterIndex[fh.idx()] = clusterIndexOffset + oldClusterGroup.localTriangleClusterIndices[localTriangleIdx];
+            uint32_t clusterIdx = clusterIndexOffset + oldClusterGroup.localTriangleClusterIndices[localTriangleIdx];
+            triangleClusterIndex[fh.idx()] = clusterIdx;
+            newClusterIndicesSet.emplace(clusterIdx);
 		}
+        std::vector<uint32_t> newClusterIndices(newClusterIndicesSet.begin(), newClusterIndicesSet.end());
+        for (auto idx : oldClusterGroup.clusterIndices)
+        {
+            lastLOD.clusters[idx].childClusterIndices = newClusterIndices;
+        }
         clusterIndexOffset += oldClusterGroup.localClusterNum;
     }
     for (size_t i = 0; i < triangleClusterIndex.size(); i++)
@@ -63,7 +75,13 @@ void Mesh::assignTriangleClusterGroup()
         auto& cluster = clusters[clusterIdx];
         cluster.triangleIndices.push_back(fh.idx());
     }
-
+    for (int i = 0; i < lastLOD.clusters.size(); i++)
+    {
+        for (int idx : lastLOD.clusters[i].childClusterIndices)
+        {
+            clusters[idx].parentClusterIndices.emplace_back(i);
+        }
+    }
 }
 
 void Mesh::buildTriangleGraph()
@@ -114,6 +132,7 @@ void Mesh::generateCluster()
     
     int clusterSize = std::min(targetClusterSize, triangleMetisGraph.nvtxs); // how many triangles does each cluster contain
     clusterNum = triangleMetisGraph.nvtxs / clusterSize; // target cluster num after partition
+    //clusterNum = (triangleMetisGraph.nvtxs + clusterSize - 1) / clusterSize;
     if (clusterNum == 1) 
     {
     
@@ -122,7 +141,7 @@ void Mesh::generateCluster()
     real_t* tpwgts = (real_t*)malloc(ncon * clusterNum * sizeof(real_t)); // We need to set a weight for each partition
     float sum = 0;
     for (idx_t i = 0; i < clusterNum; ++i) {
-        tpwgts[i] = static_cast<float>(clusterSize) / triangleMetisGraph.nvtxs; // 
+        tpwgts[i] = 1.0f / clusterNum; // 
         sum += tpwgts[i];
     }
 
@@ -160,6 +179,11 @@ void Mesh::generateCluster()
         auto clusterIdx = triangleClusterIndex[fh.idx()];
         auto& cluster = clusters[clusterIdx];
         cluster.triangleIndices.push_back(fh.idx());
+    }
+
+    for (uint32_t i=0;i< clusters.size();i++)
+    {
+        std::cout << "Cluster " << i << " Size: " << clusters[i].triangleIndices.size() << std::endl;
     }
 }
 
@@ -309,7 +333,7 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
 
         std::cout << "NUM FACES AFTER: " << mymesh.n_faces() << std::endl;
     }
-    std::cout << "Curr cluster group num: " << clusterGroups.size() << std::endl;
+    //std::cout << "Curr cluster group num: " << clusterGroups.size() << std::endl;
     for (const auto& vh : mymesh.vertices())
     {
         mymesh.status(vh).set_selected(false);

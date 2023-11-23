@@ -72,15 +72,16 @@ void NaniteMesh::generateNaniteInfo() {
 		meshLOD.clusterGroupIndexPropHandle = clusterGroupIndexPropHandle;
 		if (clusterGroupNum > 0) {
 			meshLOD.oldClusterGroups.resize(clusterGroupNum);
-			meshLOD.assignTriangleClusterGroup();
+			meshLOD.assignTriangleClusterGroup(meshes.back());
 		}
 		else {
 			meshLOD.buildTriangleGraph();
 			meshLOD.generateCluster();
 		}
 		if (meshes.size() > 0) {
-			auto lastMeshLOD = meshes[meshes.size() - 1];
+			auto& lastMeshLOD = meshes[meshes.size() - 1];
 			// Maintain DAG
+
 		}
 		// Generate cluster group by partitioning cluster graph
 		meshLOD.buildClusterGraph();
@@ -88,7 +89,7 @@ void NaniteMesh::generateNaniteInfo() {
 		meshLOD.generateClusterGroup();
 		currFaceNum = meshLOD.mesh.n_faces();
 		clusterGroupNum = meshLOD.clusterGroupNum;
-		meshes.push_back(meshLOD);
+		meshes.emplace_back(meshLOD);
 
 		mymesh = meshLOD.mesh;
 		if (clusterGroupNum > 1) 

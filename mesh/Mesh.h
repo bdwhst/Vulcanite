@@ -25,7 +25,7 @@ struct Mesh {
 public:
 	//Mesh();
 	//Mesh(const char* filename);
-	void assignTriangleClusterGroup();
+	void assignTriangleClusterGroup(Mesh& lastLOD);
 	std::vector<ClusterGroup> oldClusterGroups;
 
 	void buildTriangleGraph();

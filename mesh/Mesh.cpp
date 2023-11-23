@@ -38,7 +38,7 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
         std::vector<uint32_t> newClusterIndices(newClusterIndicesSet.begin(), newClusterIndicesSet.end());
         for (auto idx : oldClusterGroup.clusterIndices)
         {
-            lastLOD.clusters[idx].childClusterIndices = newClusterIndices;
+            lastLOD.clusters[idx].parentClusterIndices = newClusterIndices;
         }
         clusterIndexOffset += oldClusterGroup.localClusterNum;
     }
@@ -77,9 +77,9 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
     }
     for (int i = 0; i < lastLOD.clusters.size(); i++)
     {
-        for (int idx : lastLOD.clusters[i].childClusterIndices)
+        for (int idx : lastLOD.clusters[i].parentClusterIndices)
         {
-            clusters[idx].parentClusterIndices.emplace_back(i);
+            clusters[idx].childClusterIndices.emplace_back(i);
         }
     }
 }

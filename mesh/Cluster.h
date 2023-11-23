@@ -6,4 +6,15 @@ struct Cluster{
     std::vector<uint32_t> triangleIndices;
     std::vector<uint32_t> parentClusterIndices;
     std::vector<uint32_t> childClusterIndices;
+    double qemError = -1;
+    double lodError = -1;
+    double childMaxLODError = -1;
+    double parentError = -1;
+    bool isLeaf = true;
+    uint32_t lodLevel = -1;
+};
+
+struct ClusterNode {
+    double parentMaxLODError = -1;
+    double lodError = -1;
 };

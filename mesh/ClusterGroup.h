@@ -44,6 +44,8 @@ struct ClusterGroup {
 	std::vector<uint32_t> triangleIndicesLocalGlobalMap; 
 	std::unordered_map<uint32_t, uint32_t> triangleIndicesGlobalLocalMap;
 
+	float qemError;
+
 	void buildTriangleIndicesLocalGlobalMapping();
 	void buildLocalTriangleGraph();
 	void generateLocalClusters();

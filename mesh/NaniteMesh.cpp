@@ -53,6 +53,25 @@ void NaniteMesh::vkglTFMeshToOpenMesh(MyMesh& mymesh, const vkglTF::Mesh& mesh) 
 	}
 }
 
+void NaniteMesh::flattenDAG()
+{
+	for (int i = meshes.size()-1; i >= 0; i--)
+	{
+		auto& mesh = meshes[i];
+		for (size_t clusterIdx = 0; clusterIdx < mesh.clusters.size(); clusterIdx++)
+		{
+			const auto & cluster = mesh.clusters[clusterIdx];
+			ASSERT(i == cluster.lodLevel, "lod level not match");
+			//std::cout << "Cluster " << clusterIdx 
+			//	<< " lod " << i 
+			//	<< " parentError " << cluster.parentError
+			//	<< " lodError " << cluster.lodError
+			//	<< std::endl;
+			flattenedClusterNodes.emplace_back(ClusterNode({ cluster.parentError, cluster.lodError }));
+		}
+	}
+}
+
 void NaniteMesh::generateNaniteInfo() {
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
@@ -69,6 +88,7 @@ void NaniteMesh::generateNaniteInfo() {
 		// For each lod mesh
 		Mesh meshLOD;
 		meshLOD.mesh = mymesh;
+		meshLOD.lodLevel = lodNums;
 		meshLOD.clusterGroupIndexPropHandle = clusterGroupIndexPropHandle;
 		if (clusterGroupNum > 0) {
 			meshLOD.oldClusterGroups.resize(clusterGroupNum);
@@ -89,7 +109,6 @@ void NaniteMesh::generateNaniteInfo() {
 		meshLOD.generateClusterGroup();
 		currFaceNum = meshLOD.mesh.n_faces();
 		clusterGroupNum = meshLOD.clusterGroupNum;
-		meshes.emplace_back(meshLOD);
 
 		mymesh = meshLOD.mesh;
 		if (clusterGroupNum > 1) 
@@ -105,6 +124,7 @@ void NaniteMesh::generateNaniteInfo() {
 			//	}
 			//}
 		}
+		meshes.emplace_back(meshLOD);
 		std::cout << "LOD " << lodNums++ << " generated" << std::endl;
 
 	} 
@@ -114,6 +134,7 @@ void NaniteMesh::generateNaniteInfo() {
 	while (--target); // Only do one time for testing
 
 	// Linearize DAG
+	flattenDAG();
 	
 	// Save mesh for debugging
 	//{

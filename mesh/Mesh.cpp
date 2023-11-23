@@ -5,6 +5,7 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
     for (int i = 0; i < lastLOD.clusterGroups.size(); i++)
     {
         oldClusterGroups[i].clusterIndices = lastLOD.clusterGroups[i].clusterIndices;
+        oldClusterGroups[i].qemError = lastLOD.clusterGroups[i].qemError;
     }
     for (const auto & heh: mesh.halfedges())
     {
@@ -16,15 +17,17 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
 
     triangleClusterIndex.resize(mesh.n_faces(), -1);
     uint32_t clusterIndexOffset = 0;
-    for (auto & oldClusterGroup: oldClusterGroups)
+    std::vector<std::unordered_set<uint32_t>> newClusterIndicesSet;
+    newClusterIndicesSet.resize(oldClusterGroups.size());
+    for (size_t i = 0; i < oldClusterGroups.size(); i++)
     {
+        auto& oldClusterGroup = oldClusterGroups[i];
         oldClusterGroup.clusterGroupIndexPropHandle = clusterGroupIndexPropHandle;
         oldClusterGroup.mesh = &mesh;
         oldClusterGroup.buildTriangleIndicesLocalGlobalMapping();
         oldClusterGroup.buildLocalTriangleGraph();
         oldClusterGroup.generateLocalClusters();
 
-        std::unordered_set<uint32_t> newClusterIndicesSet;
         
         // Merging local cluster indices to global cluster indices
         for (const auto & fh: oldClusterGroup.clusterGroupFaces)
@@ -33,15 +36,17 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
             ASSERT(triangleClusterIndex[fh.idx()] < 0, "Repeat clsutering");
             uint32_t clusterIdx = clusterIndexOffset + oldClusterGroup.localTriangleClusterIndices[localTriangleIdx];
             triangleClusterIndex[fh.idx()] = clusterIdx;
-            newClusterIndicesSet.emplace(clusterIdx);
+            newClusterIndicesSet[i].emplace(clusterIdx);
 		}
-        std::vector<uint32_t> newClusterIndices(newClusterIndicesSet.begin(), newClusterIndicesSet.end());
+        std::vector<uint32_t> newClusterIndices(newClusterIndicesSet[i].begin(), newClusterIndicesSet[i].end());
         for (auto idx : oldClusterGroup.clusterIndices)
         {
             lastLOD.clusters[idx].parentClusterIndices = newClusterIndices;
         }
         clusterIndexOffset += oldClusterGroup.localClusterNum;
     }
+
+
     for (size_t i = 0; i < triangleClusterIndex.size(); i++)
     {
         ASSERT(triangleClusterIndex[i] >= 0, "triangleClusterIndex[i] < 0");
@@ -80,6 +85,36 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
         for (int idx : lastLOD.clusters[i].parentClusterIndices)
         {
             clusters[idx].childClusterIndices.emplace_back(i);
+        }
+    }
+    for (size_t i = 0; i < oldClusterGroups.size(); i++)
+    {
+        auto& oldClusterGroup = oldClusterGroups[i];
+        auto& newClusterIndices = newClusterIndicesSet[i];
+        for (const auto& newClusterIndex : newClusterIndices)
+        {
+            clusters[newClusterIndex].qemError = oldClusterGroup.qemError;
+        }
+    }
+
+    for (auto & cluster:clusters)
+    {
+        cluster.lodLevel = lodLevel;
+        for (int idx: cluster.childClusterIndices)
+        {
+            const auto& childCluster = lastLOD.clusters[idx];
+            cluster.childMaxLODError = std::max(cluster.childMaxLODError, childCluster.lodError);
+        }
+        cluster.childMaxLODError = std::max(cluster.childMaxLODError, .0);
+        ASSERT(cluster.childMaxLODError >= 0, "cluster.childMaxLODError < 0");
+        ASSERT(cluster.qemError >= 0, "cluster.qemError < 0");
+        cluster.lodError = cluster.qemError + cluster.childMaxLODError;
+        for (int idx : cluster.childClusterIndices)
+        {
+            auto& childCluster = lastLOD.clusters[idx];
+            // All parent error should be the same
+            ASSERT(childCluster.parentError < 0 || abs(childCluster.parentError - cluster.lodError) < FLT_EPSILON, "Parents have different lod error");
+            childCluster.parentError = cluster.lodError;
         }
     }
 }
@@ -179,12 +214,14 @@ void Mesh::generateCluster()
         auto clusterIdx = triangleClusterIndex[fh.idx()];
         auto& cluster = clusters[clusterIdx];
         cluster.triangleIndices.push_back(fh.idx());
+        cluster.lodLevel = lodLevel;
+        cluster.lodError = -1;
     }
 
-    for (uint32_t i=0;i< clusters.size();i++)
-    {
-        std::cout << "Cluster " << i << " Size: " << clusters[i].triangleIndices.size() << std::endl;
-    }
+    //for (uint32_t i=0;i< clusters.size();i++)
+    //{
+    //    std::cout << "Cluster " << i << " Size: " << clusters[i].triangleIndices.size() << std::endl;
+    //}
 }
 
 
@@ -244,7 +281,7 @@ void Mesh::colorClusterGraph()
 void Mesh::simplifyMesh(MyMesh & mymesh)
 {
     OpenMesh::Decimater::DecimaterT<MyMesh> decimater(mymesh);
-    OpenMesh::Decimater::ModQuadricT<MyMesh>::Handle hModQuadric;
+    OpenMesh::Decimater::MyModQuadricT<MyMesh>::Handle hModQuadric;
     decimater.add(hModQuadric);
     decimater.module(hModQuadric).set_max_err(FLT_MAX, false);
 
@@ -297,6 +334,9 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
         std::cout << "Cluster group: " << i << " Face num: " << currTargetFaceNum << std::endl;
 
         auto n_collapses = decimater.decimate_to_faces(0, currTargetFaceNum, true);
+        std::cout << "Total error: " << decimater.module(hModQuadric).total_err() << std::endl;
+        clusterGroups[i].qemError = decimater.module(hModQuadric).total_err();
+        decimater.module(hModQuadric).clear_total_err();
         std::cout << "n_collapses: " << n_collapses << std::endl;
         mymesh.garbage_collection();
         //MyMesh submeshAfterDecimation;

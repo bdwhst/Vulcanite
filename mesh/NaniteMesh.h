@@ -24,6 +24,10 @@ struct NaniteMesh {
 	void loadglTFModel(const tinygltf::Model& model); // TODO
 	void glTFMeshToOpenMesh(MyMesh& mymesh, const tinygltf::Mesh& mesh); // TODO
 
+	/************ Process DAG *************/
+	std::vector<ClusterNode> flattenedClusterNodes;
+	void flattenDAG();
+
 	/************ Build Info *************/
 	void generateNaniteInfo();
 

@@ -46,6 +46,7 @@ public:
 	std::vector<uint32_t> triangleIndicesSortedByClusterIdx; // face_idx sort by cluster
 	std::vector<uint32_t> triangleVertexIndicesSortedByClusterIdx; // (vert1, vert2, vert3) sort by cluster
 
+	uint32_t lodLevel = -1;
 	Graph triangleGraph;
 	int clusterNum;
 	const int targetClusterSize = 31;
@@ -170,6 +171,7 @@ namespace OpenMesh {
 			/// Post-process halfedge collapse (accumulate quadrics)
 			virtual void postprocess_collapse(const CollapseInfo& _ci) override
 			{
+				total_err_ += collapse_priority(_ci);
 				Base::mesh().property(quadrics_, _ci.v1) +=
 					Base::mesh().property(quadrics_, _ci.v0);
 			}
@@ -204,8 +206,11 @@ namespace OpenMesh {
 			/// Return value of max. allowed error.
 			double max_err() const { return max_err_; }
 
+			double total_err() const { return total_err_; }
 
+			void clear_total_err() { total_err_ = 0.0f; }
 		private:
+			double total_err_ = 0.0f;
 
 			// maximum quadric error
 			double max_err_;

@@ -75,12 +75,12 @@ struct Instance {
             if (referenceMesh->triangleClusterIndex[currTriangleIndex] != currClusterIdx)
             {
                 if (currClusterIdx != -1) {
-                    std::cout << "Cluster " << currClusterIdx << " end at " << i << std::endl;
+                    //std::cout << "Cluster " << currClusterIdx << " end at " << i << std::endl;
                     clusterInfo[currClusterIdx].triangleIndicesEnd = i;
                 }
                 currClusterIdx = referenceMesh->triangleClusterIndex[currTriangleIndex];
                 clusterInfo[currClusterIdx].triangleIndicesStart = i;
-                std::cout << "Cluster " << currClusterIdx << " start at " << i << std::endl;
+                //std::cout << "Cluster " << currClusterIdx << " start at " << i << std::endl;
             }
         }
         clusterInfo[currClusterIdx].triangleIndicesEnd = referenceMesh->triangleIndicesSortedByClusterIdx.size();

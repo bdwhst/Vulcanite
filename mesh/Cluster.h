@@ -12,9 +12,14 @@ struct Cluster{
     double parentError = -1;
     bool isLeaf = true;
     uint32_t lodLevel = -1;
+
+    glm::vec3 boundingSphereCenter;
+    float boundingSphereRadius;
 };
 
 struct ClusterNode {
     double parentMaxLODError = -1;
     double lodError = -1;
+    glm::vec3 boundingSphereCenter;
+    float boundingSphereRadius;
 };

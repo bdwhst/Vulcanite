@@ -39,6 +39,8 @@ public:
 
 	void simplifyMesh(MyMesh& mymesh);
 
+	void getBoundingSphere(Cluster & cluster);
+
 	MyMesh mesh;
 	OpenMesh::HPropHandleT<int32_t> clusterGroupIndexPropHandle;
 	glm::mat4 modelMatrix;
@@ -93,6 +95,7 @@ public:
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Vertex> uniqueVertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
+	
 };
 
 //using OpenMesh::Decimater::ModQuadricT;

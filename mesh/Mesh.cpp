@@ -116,6 +116,9 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
             ASSERT(childCluster.parentError < 0 || abs(childCluster.parentError - cluster.lodError) < FLT_EPSILON, "Parents have different lod error");
             childCluster.parentError = cluster.lodError;
         }
+
+        getBoundingSphere(cluster);
+
     }
 }
 
@@ -384,6 +387,95 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
     mymesh.garbage_collection();
     size_t actual_faces = mymesh.n_faces();
     std::cout << "NUM FACES AFTER: " << actual_faces << std::endl;
+}
+
+void Mesh::getBoundingSphere(Cluster& cluster)
+{
+    const auto& triangleIndices = cluster.triangleIndices;
+    auto & px = *mesh.fv_begin(mesh.face_handle(triangleIndices[0]));
+    MyMesh::VertexHandle py, pz;
+    float dist2_max = -1;
+    for (const auto triangleIndex: triangleIndices)
+    {
+        auto face = mesh.face_handle(triangleIndex);
+		auto fv_it = mesh.fv_iter(face);
+		auto vx = *fv_it;
+		++fv_it;
+		auto vy = *fv_it;
+		++fv_it;
+		auto vz = *fv_it;
+        for (const auto& vh : { vx, vy, vz })
+        {
+			float dist2 = (mesh.point(vh) - mesh.point(px)).sqrnorm();
+            if (dist2 > dist2_max)
+            {
+				dist2_max = dist2;
+				py = vh;
+			}
+		}
+    }
+
+    for (const auto triangleIndex : triangleIndices)
+    {
+        auto face = mesh.face_handle(triangleIndex);
+        auto fv_it = mesh.fv_iter(face);
+        auto vx = *fv_it;
+        ++fv_it;
+        auto vy = *fv_it;
+        ++fv_it;
+        auto vz = *fv_it;
+        for (const auto& vh : { vx, vy, vz })
+        {
+            float dist2 = (mesh.point(vh) - mesh.point(py)).sqrnorm();
+            if (dist2 > dist2_max)
+            {
+                dist2_max = dist2;
+                pz = vh;
+            }
+        }
+    }
+
+    auto & c = (mesh.point(py) + mesh.point(pz)) / 2.0f;
+    auto r = sqrt(dist2_max) / 2.0f;
+
+    for (const auto triangleIndex: triangleIndices)
+    {
+        auto face = mesh.face_handle(triangleIndex);
+        auto fv_it = mesh.fv_iter(face);
+        auto vx = *fv_it;
+        ++fv_it;
+        auto vy = *fv_it;
+        ++fv_it;
+        auto vz = *fv_it;
+        for (const auto& vh : { vx, vy, vz })
+        {
+            if ((mesh.point(vh) - c).sqrnorm() > r * r) 
+            {
+                r = sqrt((mesh.point(vh) - c).sqrnorm());
+            }
+        }
+    }
+
+    cluster.boundingSphereCenter = glm::vec3(c[0], c[1], c[2]);
+    cluster.boundingSphereRadius = r;
+    
+    //// Test code
+    //for (const auto triangleIndex : cluster.triangleIndices)
+    //{
+    //    auto face = mesh.face_handle(triangleIndex);
+    //    auto fv_it = mesh.fv_iter(face);
+    //    auto vx = *fv_it;
+    //    ++fv_it;
+    //    auto vy = *fv_it;
+    //    ++fv_it;
+    //    auto vz = *fv_it;
+    //    //auto c = cluster.boundingSphereCenter;
+    //    auto c = MyMesh::Point(cluster.boundingSphereCenter[0], cluster.boundingSphereCenter[1], cluster.boundingSphereCenter[2]);
+    //    for (const auto& vh : { vx, vy, vz })
+    //    {
+    //        ASSERT((mesh.point(vh) - c).norm() <= cluster.boundingSphereRadius, "Invalid bounding sphere");
+    //    }
+    //}
 }
 
 

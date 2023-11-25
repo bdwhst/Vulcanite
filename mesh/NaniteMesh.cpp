@@ -67,7 +67,12 @@ void NaniteMesh::flattenDAG()
 			//	<< " parentError " << cluster.parentError
 			//	<< " lodError " << cluster.lodError
 			//	<< std::endl;
-			flattenedClusterNodes.emplace_back(ClusterNode({ cluster.parentError, cluster.lodError }));
+			flattenedClusterNodes.emplace_back(ClusterNode({ 
+				cluster.parentError, 
+				cluster.lodError, 
+				cluster.boundingSphereCenter, 
+				cluster.boundingSphereRadius 
+			}));
 		}
 	}
 }

@@ -41,8 +41,9 @@ struct Instance {
             assert(referenceMesh->meshes[i].triangleVertexIndicesSortedByClusterIdx.size() > 0);
             totalNumIndices += referenceMesh->meshes[i].triangleVertexIndicesSortedByClusterIdx.size();
         }
-        vertexBuffer.resize(totalNumVertices);
-        indexBuffer.resize(totalNumIndices);
+        vertexBuffer.reserve(totalNumVertices);
+        indexBuffer.reserve(totalNumIndices);
+        size_t currVertSize = 0;
         for (int i = 0; i < referenceMesh->meshes.size(); i++)
         {
             for (auto& vert : referenceMesh->meshes[i].uniqueVertexBuffer)
@@ -51,8 +52,9 @@ struct Instance {
             }
             for (auto& index : referenceMesh->meshes[i].triangleVertexIndicesSortedByClusterIdx)
             {
-                indexBuffer.emplace_back(index);
+                indexBuffer.emplace_back(index + currVertSize);
             }
+            currVertSize += referenceMesh->meshes[i].uniqueVertexBuffer.size();
         }
 
         size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);

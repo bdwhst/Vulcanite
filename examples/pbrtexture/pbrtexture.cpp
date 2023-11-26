@@ -290,47 +290,48 @@ public:
 			//naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
 
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
-			models.cube.draw(drawCmdBuffers[i]);
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
+			//models.cube.draw(drawCmdBuffers[i]);
 
 
 			/*
 			*	TOP VIEW
 			*/
+			if(0)//Disabled
+			{
+				VkClearRect clearRect = {};
+				clearRect.rect.offset = { 0, 0 };
+				clearRect.rect.extent = { width / 5, width / 5 };
+				clearRect.baseArrayLayer = 0;
+				clearRect.layerCount = 1;
 
+				VkClearAttachment clearAttachment = {};
+				clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
+				clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
 
-			//VkClearRect clearRect = {};
-			//clearRect.rect.offset = { 0, 0 };
-			//clearRect.rect.extent = { width / 5, width / 5 };
-			//clearRect.baseArrayLayer = 0;
-			//clearRect.layerCount = 1;
+				vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
 
-			//VkClearAttachment clearAttachment = {};
-			//clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
-			//clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
+				VkViewport viewport1 = vks::initializers::viewport((float)width / 5.0f, (float)height / 5.0f, 0.0f, 1.0f);
+				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
 
-			//vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
+				VkRect2D scissor1 = vks::initializers::rect2D((float)width / 5.0f, (float)height / 5.0f, 0.0f, 0.0f);
+				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
+				if (displaySkybox)
+				{
+					vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
+					vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+					models.skybox.draw(drawCmdBuffers[i]);
+				}
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
+				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &instance1.vertices.buffer, offsets);
+				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-			//VkViewport viewport1 = vks::initializers::viewport((float)width / 5.0f, (float)height / 5.0f, 0.0f, 1.0f);
-			//vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
-
-			//VkRect2D scissor1 = vks::initializers::rect2D((float)width / 5.0f, (float)height / 5.0f, 0.0f, 0.0f);
-			//vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
-			//if (displaySkybox)
-			//{
-			//	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
-			//	vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
-			//	models.skybox.draw(drawCmdBuffers[i]);
-			//}
-			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
-			//vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-			////vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
-			//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &naniteMesh.meshes[naniteMesh.meshes.size() - 1].uniqueVertices.buffer, offsets);
-			//vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-			//vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
-
-			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
-			//models.cube.draw(drawCmdBuffers[i]);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
+				models.cube.draw(drawCmdBuffers[i]);
+			}
 
 
 			drawUI(drawCmdBuffers[i]);
@@ -443,8 +444,8 @@ public:
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
 		naniteMesh.setModelPath((getAssetPath() + "models/bunny/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf");
-		naniteMesh.generateNaniteInfo();
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf", false);
+		//naniteMesh.generateNaniteInfo();
 		/*naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
 		naniteMesh.meshes[0].createSortedIndexBuffer(vulkanDevice, queue);
@@ -667,7 +668,7 @@ public:
 
 		// PBR pipeline
 		rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+		rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
 		//rasterizationState.cullMode = VK_CULL_MODE_NONE;
 		shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 		shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);

@@ -396,6 +396,7 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
 
 void Mesh::getBoundingSphere(Cluster& cluster)
 {
+    return;
     const auto& triangleIndices = cluster.triangleIndices;
     auto & px = *mesh.fv_begin(mesh.face_handle(triangleIndices[0]));
     MyMesh::VertexHandle py, pz;
@@ -611,7 +612,7 @@ void Mesh::initUniqueVertexBuffer() {
         v.uv = glm::vec2(mesh.texcoord2D(vertex)[0], mesh.texcoord2D(vertex)[1]);
         v.joint0 = glm::vec4(0.0f);
         v.weight0 = glm::vec4(0.0f);
-        uniqueVertexBuffer.push_back(v);
+        uniqueVertexBuffer.emplace_back(v);
     }
 }
 

@@ -83,9 +83,9 @@ void NaniteMesh::generateNaniteInfo() {
 	int clusterGroupNum = -1;
 	int target = 3;
 	int currFaceNum = -1;
-	if (!OpenMesh::IO::read_mesh(mymesh, "D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny.obj")) {
+	/*if (!OpenMesh::IO::read_mesh(mymesh, "D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny.obj")) {
 		ASSERT(0, "failed to load mesh");
-	}
+	}*/
 	// Add a customized property to store clusterGroupIndex of last level of detail
 	mymesh.add_property(clusterGroupIndexPropHandle);
 	do
@@ -97,7 +97,7 @@ void NaniteMesh::generateNaniteInfo() {
 		meshLOD.clusterGroupIndexPropHandle = clusterGroupIndexPropHandle;
 		if (clusterGroupNum > 0) {
 			meshLOD.oldClusterGroups.resize(clusterGroupNum);
-			meshLOD.assignTriangleClusterGroup(meshes.back());
+			meshLOD.assignTriangleClusterGroup(meshes.back()); 
 		}
 		else {
 			meshLOD.buildTriangleGraph();
@@ -140,7 +140,8 @@ void NaniteMesh::generateNaniteInfo() {
 
 	// Linearize DAG
 	flattenDAG();
-	serialize("D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny\\");
+	std::filesystem::path currentPath = std::filesystem::current_path();
+	serialize(currentPath.string());
 	// Save mesh for debugging
 	//{
 	//	std::string output_filename = "output.obj";
@@ -161,7 +162,7 @@ void NaniteMesh::serialize(const std::string& filepath)
 			std::cout << "Directory created successfully." << std::endl;
 		}
 		else {
-			std::cout << "Failed to create directory or it already exists." << std::endl;
+			std::cout << "Failed to create directory or it already exists. Dir:" << filepath << std::endl;
 		}
 	}
 	catch (const std::filesystem::filesystem_error& e) {

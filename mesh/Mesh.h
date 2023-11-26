@@ -9,6 +9,7 @@
 #include <OpenMesh/Tools/Decimater/ModQuadricT.hh>
 #include <OpenMesh/Core/Geometry/QuadricT.hh>
 #include <vulkan/vulkan.h>
+#include <json/json.hpp>
 
 #include "VulkanDevice.h"
 #include "VulkanglTFModel.h"
@@ -41,13 +42,17 @@ public:
 
 	void getBoundingSphere(Cluster & cluster);
 
+	json toJson();
+	void fromJson(const json& j);
+
 	MyMesh mesh;
 	OpenMesh::HPropHandleT<int32_t> clusterGroupIndexPropHandle;
 	glm::mat4 modelMatrix;
 
+	// Needs to be serialized
 	std::vector<uint32_t> triangleIndicesSortedByClusterIdx; // face_idx sort by cluster
 	std::vector<uint32_t> triangleVertexIndicesSortedByClusterIdx; // (vert1, vert2, vert3) sort by cluster
-
+	
 	uint32_t lodLevel = -1;
 	Graph triangleGraph;
 	int clusterNum;

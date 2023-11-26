@@ -483,6 +483,25 @@ void Mesh::getBoundingSphere(Cluster& cluster)
     //}
 }
 
+json Mesh::toJson()
+{
+    json result = {
+        {"clusterNum", clusterNum},
+        {"triangleClusterIndex", triangleClusterIndex},
+        {"triangleIndicesSortedByClusterIdx", triangleIndicesSortedByClusterIdx},
+        {"triangleVertexIndicesSortedByClusterIdx", triangleVertexIndicesSortedByClusterIdx}
+    };
+    return result;
+}
+
+void Mesh::fromJson(const json& j)
+{
+    clusterNum = j["clusterNum"].get<int>();
+    triangleClusterIndex = j["triangleClusterIndex"].get<std::vector<int>>();
+    triangleIndicesSortedByClusterIdx = j["triangleIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
+    triangleVertexIndicesSortedByClusterIdx = j["triangleVertexIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
+}
+
 
 void Mesh::generateClusterGroup()
 {

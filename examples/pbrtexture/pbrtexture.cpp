@@ -441,7 +441,9 @@ public:
 		//models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		models.object.loadFromFile(getAssetPath() + "models/bunny.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
+		naniteMesh.setModelPath((getAssetPath() + "models/bunny/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf");
 		naniteMesh.generateNaniteInfo();
 		naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);

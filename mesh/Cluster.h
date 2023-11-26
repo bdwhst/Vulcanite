@@ -1,6 +1,10 @@
 #pragma once
 #include <glm/glm.hpp>
 #include <vector>
+#include <json/json.hpp>
+
+using json = nlohmann::json;
+
 struct Cluster{
     uint32_t clusterGroupIndex;
     std::vector<uint32_t> triangleIndices;
@@ -22,4 +26,39 @@ struct ClusterNode {
     double lodError = -1;
     glm::vec3 boundingSphereCenter;
     float boundingSphereRadius;
+
+    // Serialization method to convert object to JSON
+    json toJson() const {
+        return {
+            {"parentMaxLODError", parentMaxLODError},
+            {"lodError", lodError},
+            {"boundingSphereCenter", {boundingSphereCenter.x, boundingSphereCenter.y, boundingSphereCenter.z}},
+            {"boundingSphereRadius", boundingSphereRadius}
+        };
+    }
+
+    // Deserialization method to populate object from JSON
+    void fromJson(const json& j) {
+        //if (j.contains("parentMaxLODError")) {
+        if (j.find("parentMaxLODError") != j.end()) {
+            parentMaxLODError = j["parentMaxLODError"].get<double>();
+        }
+
+        //if (j.contains("lodError")) {
+        if (j.find("lodError") != j.end()) {
+            lodError = j["lodError"].get<double>();
+        }
+
+        //if (j.contains("boundingSphereCenter") && j["boundingSphereCenter"].is_array() && j["boundingSphereCenter"].size() == 3) {
+        if (j.find("boundingSphereCenter") != j.end() && j["boundingSphereCenter"].is_array() && j["boundingSphereCenter"].size() == 3) {
+            boundingSphereCenter.x = j["boundingSphereCenter"][0].get<float>();
+            boundingSphereCenter.y = j["boundingSphereCenter"][1].get<float>();
+            boundingSphereCenter.z = j["boundingSphereCenter"][2].get<float>();
+        }
+
+        //if (j.contains("boundingSphereRadius")) {
+        if (j.find("boundingSphereRadius") != j.end()){
+            boundingSphereRadius = j["boundingSphereRadius"].get<double>();
+        }
+    }
 };

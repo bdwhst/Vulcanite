@@ -3,6 +3,9 @@
 #include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
 #include <tinygltf/tiny_gltf.h>
+
+#include <filesystem>
+
 #include "Mesh.h"
 
 struct NaniteMesh {
@@ -15,6 +18,7 @@ struct NaniteMesh {
 	// Load from vkglTF
 	const vkglTF::Model * vkglTFModel;
 	const vkglTF::Mesh* vkglTFMesh;
+	void setModelPath(const char* path) { filepath = path; };
 	void loadvkglTFModel(const vkglTF::Model& model);
 	void vkglTFMeshToOpenMesh(MyMesh& mymesh, const vkglTF::Mesh& mesh);
 	void vkglTFPrimitiveToOpenMesh(MyMesh& mymesh, const vkglTF::Primitive& prim);
@@ -31,6 +35,12 @@ struct NaniteMesh {
 	/************ Build Info *************/
 	void generateNaniteInfo();
 
+	/************ Serialization *************/
+	void serialize(const std::string& filepath);
+	void deserialize(const std::string& filepath);
+
+
+	void initNaniteInfo(const std::string& filepath, bool useCache = true);
 	/*
 		What data structure should be used to store 
 		1. lods
@@ -45,6 +55,9 @@ struct NaniteMesh {
 	std::vector<uint32_t> indexBuffer;
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
+
+	const char* filepath = nullptr;
+	const char* cache_time_key = "cache_time";
 };
 
 void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes);

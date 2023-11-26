@@ -67,9 +67,13 @@ void NaniteMesh::flattenDAG()
 			//	<< " parentError " << cluster.parentError
 			//	<< " lodError " << cluster.lodError
 			//	<< std::endl;
+			float normalizedParentError = (i == meshes.size() - 1) ? cluster.parentError / cluster.parentSurfaceArea : FLT_MAX;
+			float normalizedLodError = cluster.lodError / cluster.surfaceArea;
+			ASSERT(cluster.parentSurfaceArea > 0 || i == meshes.size()-1, "parentSurfaceArea should be positive");
+			ASSERT(cluster.surfaceArea > 0, "surfaceArea should be positive");
 			flattenedClusterNodes.emplace_back(ClusterNode({ 
-				cluster.parentError, 
-				cluster.lodError, 
+				normalizedParentError,
+				normalizedLodError,
 				cluster.boundingSphereCenter, 
 				cluster.boundingSphereRadius 
 			}));
@@ -258,6 +262,7 @@ void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
 	if (!hasInitialized) {
 		generateNaniteInfo();
 		serialize(cachePath.c_str());
+		std::cout << cachePath << "nanite_info.json" << " generated" << std::endl;
 	}
 }
 

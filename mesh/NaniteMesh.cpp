@@ -67,9 +67,13 @@ void NaniteMesh::flattenDAG()
 			//	<< " parentError " << cluster.parentError
 			//	<< " lodError " << cluster.lodError
 			//	<< std::endl;
+			float normalizedParentError = (i == meshes.size() - 1) ? cluster.parentError / cluster.parentSurfaceArea : FLT_MAX;
+			float normalizedLodError = cluster.lodError / cluster.surfaceArea;
+			ASSERT(cluster.parentSurfaceArea > 0 || i == meshes.size()-1, "parentSurfaceArea should be positive");
+			ASSERT(cluster.surfaceArea > 0, "surfaceArea should be positive");
 			flattenedClusterNodes.emplace_back(ClusterNode({ 
-				cluster.parentError, 
-				cluster.lodError, 
+				normalizedParentError,
+				normalizedLodError,
 				cluster.boundingSphereCenter, 
 				cluster.boundingSphereRadius 
 			}));
@@ -140,8 +144,6 @@ void NaniteMesh::generateNaniteInfo() {
 
 	// Linearize DAG
 	flattenDAG();
-	std::filesystem::path currentPath = std::filesystem::current_path();
-	serialize(currentPath.string());
 	// Save mesh for debugging
 	//{
 	//	std::string output_filename = "output.obj";
@@ -171,7 +173,7 @@ void NaniteMesh::serialize(const std::string& filepath)
 
 	for (size_t i = 0; i < meshes.size(); i++)
 	{
-				auto& mesh = meshes[i];
+		auto& mesh = meshes[i];
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
 		// Export the mesh to the specified file
 		if (!OpenMesh::IO::write_mesh(mesh.mesh, output_filename)) {
@@ -183,6 +185,10 @@ void NaniteMesh::serialize(const std::string& filepath)
 	for (size_t i = 0; i < flattenedClusterNodes.size(); i++)
 	{
 		result["flattenedClusterNodes"][i] = flattenedClusterNodes[i].toJson();
+	}
+	for (size_t i = 0; i < meshes.size(); i++)
+	{
+		result["mesh"][i] = meshes[i].toJson();
 	}
 	result[cache_time_key] = std::time(nullptr);
 	result["lodNums"] = lodNums;
@@ -210,12 +216,17 @@ void NaniteMesh::deserialize(const std::string & filepath)
 			node.fromJson(element);
 			flattenedClusterNodes.push_back(node);
 		}
+		
 		lodNums = loadedJson["lodNums"].get<uint32_t>();
+		meshes.resize(lodNums);
+		for (int i = 0; i < meshes.size(); ++i) {
+			auto& meshLOD = meshes[i];
+			meshLOD.fromJson(loadedJson["mesh"][i]);
+		}
 	}
 	else {
 		ASSERT(0, "Error opening file for deserialization");
 	}
-	meshes.resize(lodNums);
 	for (size_t i = 0; i < lodNums; i++)
 	{
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
@@ -250,6 +261,8 @@ void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
 
 	if (!hasInitialized) {
 		generateNaniteInfo();
+		serialize(cachePath.c_str());
+		std::cout << cachePath << "nanite_info.json" << " generated" << std::endl;
 	}
 }
 

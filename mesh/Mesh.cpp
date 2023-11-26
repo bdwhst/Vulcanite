@@ -99,6 +99,9 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
 
     for (auto & cluster:clusters)
     {
+        getBoundingSphere(cluster);
+        calcSurfaceArea(cluster);
+
         cluster.lodLevel = lodLevel;
         for (int idx: cluster.childClusterIndices)
         {
@@ -114,10 +117,10 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
             auto& childCluster = lastLOD.clusters[idx];
             // All parent error should be the same
             ASSERT(childCluster.parentError < 0 || abs(childCluster.parentError - cluster.lodError) < FLT_EPSILON, "Parents have different lod error");
+            ASSERT(cluster.surfaceArea > DBL_EPSILON, "cluster.surfaceArea <= 0");
             childCluster.parentError = cluster.lodError;
+            childCluster.parentSurfaceArea = cluster.surfaceArea;
         }
-
-        getBoundingSphere(cluster);
 
     }
 }
@@ -224,6 +227,7 @@ void Mesh::generateCluster()
     for (auto & cluster: clusters)
     {
         getBoundingSphere(cluster);
+        calcSurfaceArea(cluster);
     }
 
     //for (uint32_t i=0;i< clusters.size();i++)
@@ -481,6 +485,41 @@ void Mesh::getBoundingSphere(Cluster& cluster)
     //        ASSERT((mesh.point(vh) - c).norm() <= cluster.boundingSphereRadius, "Invalid bounding sphere");
     //    }
     //}
+}
+
+void Mesh::calcSurfaceArea(Cluster& cluster)
+{
+	cluster.surfaceArea = 0.0f;
+    for (const auto triangleIndex : cluster.triangleIndices)
+    {
+		auto face = mesh.face_handle(triangleIndex);
+		auto fv_it = mesh.fv_iter(face);
+		auto vx = *fv_it;
+		++fv_it;
+		auto vy = *fv_it;
+		++fv_it;
+		auto vz = *fv_it;
+		cluster.surfaceArea += mesh.calc_face_area(face);
+	}
+}
+
+json Mesh::toJson()
+{
+    json result = {
+        {"clusterNum", clusterNum},
+        {"triangleClusterIndex", triangleClusterIndex},
+        {"triangleIndicesSortedByClusterIdx", triangleIndicesSortedByClusterIdx},
+        {"triangleVertexIndicesSortedByClusterIdx", triangleVertexIndicesSortedByClusterIdx}
+    };
+    return result;
+}
+
+void Mesh::fromJson(const json& j)
+{
+    clusterNum = j["clusterNum"].get<int>();
+    triangleClusterIndex = j["triangleClusterIndex"].get<std::vector<int>>();
+    triangleIndicesSortedByClusterIdx = j["triangleIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
+    triangleVertexIndicesSortedByClusterIdx = j["triangleVertexIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
 }
 
 

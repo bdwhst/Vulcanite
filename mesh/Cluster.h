@@ -17,6 +17,8 @@ struct Cluster{
     bool isLeaf = true;
     uint32_t lodLevel = -1;
 
+    float surfaceArea = 0.0f;
+    float parentSurfaceArea = 0.0f;
     glm::vec3 boundingSphereCenter;
     float boundingSphereRadius;
 };

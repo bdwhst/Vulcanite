@@ -1,0 +1,42 @@
+#version 450
+
+#define WORKGROUP_SIZE 32
+
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+struct ErrorInfo
+{
+    vec4 centerR;
+    float errorWorld;
+    float errorScreen;
+};
+
+layout(std430, set = 0, binding = 0) buffer ClustersIn {
+   ErrorInfo data[ ];
+};
+
+layout(set = 0, binding = 1) uniform UBOMats {
+    vec3 camUp;
+    mat4 view;
+    mat4 proj;
+} ubomats;
+
+
+layout(push_constant) uniform PushConstants {
+    int numClusters;
+    vec2 screenSize;
+} pcs;
+
+void main()
+{
+    if(index >= pcs.numClusters) return;
+    ErrorInfo error = data[index];
+    vec3 center = error.centerR.xyz
+    float R = error.centerR.w;
+    vec3 radius = ubomats.camUp*R;
+    vec4 radH = ubomats.proj*ubomats.view*vec4(radius,0);
+    radH.xy = radH.xy*0.5+0.5;
+    vec2 radS = radH.xy*screenSize;
+    data[index].errorScreen = error.errorWorld * (radS.x*radS.x+radS.y*radS.y)/(R*R);
+}
+

@@ -280,14 +280,14 @@ public:
 			//models.object.draw(drawCmdBuffers[i]);
 
 			//TODO: support multiple primitives in a model
-			//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
-			//vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.referenceMesh->sortedIndices.buffer, 0, VK_INDEX_TYPE_UINT32);
-			//vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &instance1.vertices.buffer, offsets);
+			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 			/*vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);*/
-			naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
+			//naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
 
 
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
@@ -299,38 +299,38 @@ public:
 			*/
 
 
-			VkClearRect clearRect = {};
-			clearRect.rect.offset = { 0, 0 };
-			clearRect.rect.extent = { width / 5, width / 5 };
-			clearRect.baseArrayLayer = 0;
-			clearRect.layerCount = 1;
+			//VkClearRect clearRect = {};
+			//clearRect.rect.offset = { 0, 0 };
+			//clearRect.rect.extent = { width / 5, width / 5 };
+			//clearRect.baseArrayLayer = 0;
+			//clearRect.layerCount = 1;
 
-			VkClearAttachment clearAttachment = {};
-			clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
-			clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
+			//VkClearAttachment clearAttachment = {};
+			//clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
+			//clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
 
-			vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
+			//vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
 
-			VkViewport viewport1 = vks::initializers::viewport((float)width / 5.0f, (float)height / 5.0f, 0.0f, 1.0f);
-			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
+			//VkViewport viewport1 = vks::initializers::viewport((float)width / 5.0f, (float)height / 5.0f, 0.0f, 1.0f);
+			//vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
 
-			VkRect2D scissor1 = vks::initializers::rect2D((float)width / 5.0f, (float)height / 5.0f, 0.0f, 0.0f);
-			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
-			if (displaySkybox)
-			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
-				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
-				models.skybox.draw(drawCmdBuffers[i]);
-			}
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-			//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
-			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &naniteMesh.meshes[naniteMesh.meshes.size() - 1].uniqueVertices.buffer, offsets);
-			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			//VkRect2D scissor1 = vks::initializers::rect2D((float)width / 5.0f, (float)height / 5.0f, 0.0f, 0.0f);
+			//vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
+			//if (displaySkybox)
+			//{
+			//	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
+			//	vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+			//	models.skybox.draw(drawCmdBuffers[i]);
+			//}
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
+			//vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+			////vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+			//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &naniteMesh.meshes[naniteMesh.meshes.size() - 1].uniqueVertices.buffer, offsets);
+			//vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			//vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
-			models.cube.draw(drawCmdBuffers[i]);
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
+			//models.cube.draw(drawCmdBuffers[i]);
 
 
 			drawUI(drawCmdBuffers[i]);
@@ -443,15 +443,20 @@ public:
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
 		naniteMesh.loadvkglTFModel(models.object);
 		naniteMesh.generateNaniteInfo();
-		naniteMesh.meshes[0].initVertexBuffer();
+		/*naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
 		naniteMesh.meshes[0].createSortedIndexBuffer(vulkanDevice, queue);
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].initVertexBuffer();
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].initUniqueVertexBuffer();
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].createVertexBuffer(vulkanDevice, queue);
 		naniteMesh.meshes[naniteMesh.meshes.size()-1].createUniqueVertexBuffer(vulkanDevice, queue);
-		naniteMesh.meshes[naniteMesh.meshes.size()-1].createSortedIndexBuffer(vulkanDevice, queue);
-		instance1 = Instance(&naniteMesh.meshes[naniteMesh.meshes.size()-1], model0);
+		naniteMesh.meshes[naniteMesh.meshes.size()-1].createSortedIndexBuffer(vulkanDevice, queue);*/
+		for (int i = 0; i < naniteMesh.meshes.size(); i++)
+		{
+			naniteMesh.meshes[i].initUniqueVertexBuffer();
+		}
+		instance1 = Instance(&naniteMesh, model0);
+		instance1.createBuffersForNaniteLODs(vulkanDevice, queue);
 		instance1.buildClusterInfo();
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
@@ -604,7 +609,7 @@ public:
 		drawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		VkDescriptorBufferInfo inputIndicesInfo{};
-		inputIndicesInfo.buffer = instance1.referenceMesh->sortedIndices.buffer;
+		inputIndicesInfo.buffer = instance1.indices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
 		manager->writeToSet("culling", 0, 0, &clustersInfoBuffer.descriptor);
 		manager->writeToSet("culling", 0, 1, &inputIndicesInfo);
@@ -1702,9 +1707,9 @@ public:
 	void createCullingBuffers()
 	{
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
-			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			models.object.indices.count * sizeof(uint32_t),
+			instance1.indices.count * sizeof(uint32_t),
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));

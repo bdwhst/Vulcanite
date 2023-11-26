@@ -83,9 +83,9 @@ void NaniteMesh::generateNaniteInfo() {
 	int clusterGroupNum = -1;
 	int target = 3;
 	int currFaceNum = -1;
-	//if (!OpenMesh::IO::read_mesh(mymesh, "D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny.obj")) {
-	//	ASSERT(0, "failed to load mesh");
-	//}
+	if (!OpenMesh::IO::read_mesh(mymesh, "D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny.obj")) {
+		ASSERT(0, "failed to load mesh");
+	}
 	// Add a customized property to store clusterGroupIndex of last level of detail
 	mymesh.add_property(clusterGroupIndexPropHandle);
 	do
@@ -140,7 +140,7 @@ void NaniteMesh::generateNaniteInfo() {
 
 	// Linearize DAG
 	flattenDAG();
-	
+	serialize("D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny\\");
 	// Save mesh for debugging
 	//{
 	//	std::string output_filename = "output.obj";
@@ -150,6 +150,106 @@ void NaniteMesh::generateNaniteInfo() {
 	//		std::cerr << "Error exporting mesh to " << output_filename << std::endl;
 	//	}
 	//}
+}
+
+void NaniteMesh::serialize(const std::string& filepath)
+{
+	std::filesystem::path directoryPath(filepath);
+
+	try {
+		if (std::filesystem::create_directory(directoryPath)) {
+			std::cout << "Directory created successfully." << std::endl;
+		}
+		else {
+			std::cout << "Failed to create directory or it already exists." << std::endl;
+		}
+	}
+	catch (const std::filesystem::filesystem_error& e) {
+		ASSERT(0, "Error creating directory");
+	}
+
+	for (size_t i = 0; i < meshes.size(); i++)
+	{
+				auto& mesh = meshes[i];
+		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
+		// Export the mesh to the specified file
+		if (!OpenMesh::IO::write_mesh(mesh.mesh, output_filename)) {
+			std::cerr << "Error exporting mesh to " << output_filename << std::endl;
+		}
+	}
+
+	json result;
+	for (size_t i = 0; i < flattenedClusterNodes.size(); i++)
+	{
+		result["flattenedClusterNodes"][i] = flattenedClusterNodes[i].toJson();
+	}
+	result[cache_time_key] = std::time(nullptr);
+	result["lodNums"] = lodNums;
+	result["clusterNodeSize"] = flattenedClusterNodes.size();
+	// Save the JSON data to a file
+	std::ofstream file(std::string(filepath) + "nanite_info.json");
+	if (file.is_open()) {
+		file << result.dump(2); // Pretty-print with an indentation of 2 spaces
+		file.close();
+	}
+	else {
+		ASSERT(0, "Error opening file for serialization");
+	}
+}
+
+void NaniteMesh::deserialize(const std::string & filepath)
+{
+	std::ifstream inputFile(std::string(filepath) + "nanite_info.json");
+	if (inputFile.is_open()) {
+		json loadedJson;
+		inputFile >> loadedJson;
+
+		for (const auto& element : loadedJson["flattenedClusterNodes"]) {
+			ClusterNode node;
+			node.fromJson(element);
+			flattenedClusterNodes.push_back(node);
+		}
+		lodNums = loadedJson["lodNums"].get<uint32_t>();
+	}
+	else {
+		ASSERT(0, "Error opening file for deserialization");
+	}
+	meshes.resize(lodNums);
+	for (size_t i = 0; i < lodNums; i++)
+	{
+		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
+		if (!OpenMesh::IO::read_mesh(meshes[i].mesh, output_filename)) {
+			ASSERT(0, "failed to load mesh");
+		}
+		meshes[i].lodLevel = i;
+	}
+}
+
+void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
+	bool hasCache = false;
+	bool hasInitialized = false;
+	std::string cachePath;
+	if (filepath.find_last_of(".") != std::string::npos) {
+		cachePath = filepath.substr(0, filepath.find_last_of('.')) + "\\";
+	}
+	else {
+		ASSERT(0, "Invalid file path, no ext");
+	}
+
+	if (useCache) {
+		std::ifstream inputFile(cachePath + "nanite_info.json");
+		if (inputFile.is_open()) {
+			deserialize(cachePath.c_str());
+			hasInitialized = true;
+		}
+		else {
+			ASSERT(0, "No cache, need to initialize");
+		}
+	}	
+
+	if (!hasInitialized) {
+		generateNaniteInfo();
+	}
 }
 
 void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes) {

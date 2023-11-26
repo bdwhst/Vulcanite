@@ -221,6 +221,11 @@ void Mesh::generateCluster()
         cluster.lodError = -1;
     }
 
+    for (auto & cluster: clusters)
+    {
+        getBoundingSphere(cluster);
+    }
+
     //for (uint32_t i=0;i< clusters.size();i++)
     //{
     //    std::cout << "Cluster " << i << " Size: " << clusters[i].triangleIndices.size() << std::endl;
@@ -458,7 +463,7 @@ void Mesh::getBoundingSphere(Cluster& cluster)
 
     cluster.boundingSphereCenter = glm::vec3(c[0], c[1], c[2]);
     cluster.boundingSphereRadius = r;
-    
+
     //// Test code
     //for (const auto triangleIndex : cluster.triangleIndices)
     //{
@@ -586,7 +591,7 @@ void Mesh::initVertexBuffer(){
             // Assign clusterId and clusterGroupId
             int clusterId = triangleClusterIndex[face.idx()];
             v.joint0 = glm::vec4(nodeColors[clusterColorAssignment[clusterId]], clusterId);
-
+            
             int clusterGroupId = clusterGroupIndex[clusterId];
             //// Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
             v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);

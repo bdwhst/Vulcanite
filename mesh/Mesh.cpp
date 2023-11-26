@@ -396,7 +396,6 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
 
 void Mesh::getBoundingSphere(Cluster& cluster)
 {
-    return;
     const auto& triangleIndices = cluster.triangleIndices;
     auto & px = *mesh.fv_begin(mesh.face_handle(triangleIndices[0]));
     MyMesh::VertexHandle py, pz;
@@ -420,7 +419,7 @@ void Mesh::getBoundingSphere(Cluster& cluster)
 			}
 		}
     }
-
+    dist2_max = -1;
     for (const auto triangleIndex : triangleIndices)
     {
         auto face = mesh.face_handle(triangleIndex);

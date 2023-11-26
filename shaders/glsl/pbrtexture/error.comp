@@ -33,6 +33,7 @@ void main()
     ErrorInfo error = data[index];
     vec3 center = error.centerR.xyz
     float R = error.centerR.w;
+    //TODO: get a better error estimation
     vec3 radius = ubomats.camUp*R;
     vec4 radH = ubomats.proj*ubomats.view*vec4(radius,0);
     radH.xy = radH.xy*0.5+0.5;

@@ -14,9 +14,8 @@ struct Cluster
 
 struct ErrorInfo
 {
-    vec4 centerR;
-    float errorWorld;
-    float errorScreen;
+    float clusterError;
+    float parentError;
 };
 
 

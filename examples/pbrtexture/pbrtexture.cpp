@@ -126,6 +126,9 @@ public:
 	vks::Buffer cullingUniformBuffer;
 	vks::Buffer drawIndexedIndirectBuffer;
 
+	vks::Buffer errorInfoBuffer;
+	vks::Buffer projectedErrorBuffer;
+
 	VkPipelineLayout pipelineLayout;
 
 	VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
@@ -1787,6 +1790,11 @@ public:
 
 		drawIndexedIndirectBuffer.device = device;
 		VK_CHECK_RESULT(drawIndexedIndirectBuffer.map());
+	}
+
+	void createErrorBuffer()
+	{
+
 	}
 
 	void createHiZBuffer()

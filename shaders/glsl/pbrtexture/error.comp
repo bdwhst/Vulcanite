@@ -7,18 +7,23 @@ layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 struct ErrorInfo
 {
     vec4 centerR;
-    float errorWorld;
-    float errorScreen;
+    vec4 centerRP;
+    vec2 errorWorld;//node error and parent error in world
 };
 
-layout(std430, set = 0, binding = 0) buffer ClustersIn {
-   ErrorInfo data[ ];
+layout(std430, set = 0, binding = 0) buffer readonly WorldError {
+   ErrorInfo idata[ ];
 };
 
-layout(set = 0, binding = 1) uniform UBOMats {
-    vec3 camUp;
+layout(std430, set = 0, binding = 1) buffer ClusterError {
+   vec2 odata[ ];
+};
+
+layout(set = 0, binding = 2) uniform UBOMats {
     mat4 view;
     mat4 proj;
+    vec3 camUp;
+    vec3 camRight;
 } ubomats;
 
 
@@ -27,17 +32,36 @@ layout(push_constant) uniform PushConstants {
     vec2 screenSize;
 } pcs;
 
+float getScreenBoundRadiusSq(vec3 center, float R)
+{
+    //TODO: get a better error estimation
+    vec4 c = ubomats.proj*ubomats.view*vec4(center,1);
+    c.xy/=c.w;
+    c.xy=c.xy*0.5+0.5;
+    vec4 p0 = ubomats.proj*ubomats.view*vec4(R*ubomats.camUp+center,1);
+    p0.xy/=p0.w;
+    p0.xy=p0.xy*0.5+0.5;
+    vec4 p1 = ubomats.proj*ubomats.view*vec4(R*ubomats.camRight+center,1);
+    p1.xy/=p1.w;
+    p1.xy=p1.xy*0.5+0.5;
+    vec2 v0 = (p0-c)*pcs.screenSize;
+    vec2 v1 = (p1-c)*pcs.screenSize;
+    return max(dot(v0,v0),dot(v1,v1));
+}
+
 void main()
 {
     if(index >= pcs.numClusters) return;
-    ErrorInfo error = data[index];
-    vec3 center = error.centerR.xyz
-    float R = error.centerR.w;
-    //TODO: get a better error estimation
-    vec3 radius = ubomats.camUp*R;
-    vec4 radH = ubomats.proj*ubomats.view*vec4(radius,0);
-    radH.xy = radH.xy*0.5+0.5;
-    vec2 radS = radH.xy*screenSize;
-    data[index].errorScreen = error.errorWorld * (radS.x*radS.x+radS.y*radS.y)/(R*R);
+    ErrorInfo error = idata[index];
+    vec3 center;
+    float R;
+
+    center = error.centerR.xyz;
+    R = error.centerR.w;
+    odata[index].x = error.errorWorld.x * getScreenBoundRadiusSq(center,R)/(R*R);
+
+    center = error.centerRP.xyz;
+    R = error.centerRP.w;
+    odata[index].y = error.errorWorld.y * getScreenBoundRadiusSq(center,R)/(R*R);
 }
 

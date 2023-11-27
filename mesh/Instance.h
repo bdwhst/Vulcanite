@@ -19,6 +19,13 @@ struct ClusterInfo {
 	};
 };
 
+struct ErrorInfo
+{
+    alignas(16) glm::vec4 centerR;
+    alignas(16) glm::vec4 centerRP;
+    alignas(8)  glm::vec2 errorWorld;//node error and parent error in world
+};
+
 struct Instance {
 	NaniteMesh* referenceMesh;
 	glm::mat4 rootTransform;

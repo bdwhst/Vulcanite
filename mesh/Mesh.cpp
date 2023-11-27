@@ -120,6 +120,7 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
             ASSERT(cluster.surfaceArea > DBL_EPSILON, "cluster.surfaceArea <= 0");
             childCluster.parentError = cluster.lodError;
             childCluster.parentSurfaceArea = cluster.surfaceArea;
+            cluster.boundingSphereRadius = glm::max(cluster.boundingSphereRadius, childCluster.boundingSphereRadius);
         }
 
     }

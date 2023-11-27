@@ -127,9 +127,13 @@ It should be solvable without using recursive partition?
 
 ![](./images/clustering_2023_11_11.gif)
 
+- Milestone of Dynamic LOD selection (Red: LOD 0 Green: LOD 1 Blue: LOD 2)
+
+![](./images/dynamic_lod_basic.gif)
+
 - **Limitations**
-	- Not fixed size
-	- Unconnected mesh
+  - Not fixed size
+  - Unconnected mesh
 
 
 11.12
@@ -194,4 +198,3 @@ Steps
 
 Basic Dynamic LOD
 
-![](E:\Code\Vulcanite\images\dynamic_lod_basic.gif)

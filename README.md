@@ -99,7 +99,7 @@ Only test 5 clusters for now
 - Incorrect?
 	- Why are triangles that are not even adjacent getting assigned into the same cluster??? Is this right?
 	- May need to dig deeper into graph partition part...``
-![Alt text](./images/cluster_result_2023_11_10.png)
+	![Alt text](./images/cluster_result_2023_11_10.png)
 
 11.11
 
@@ -189,3 +189,9 @@ Steps
 - Bad News: We may use the wrong clustering step.
 	- Do clustering within each cluster group.
 	- How to do decimation within one cluster group?
+
+11.26
+
+Basic Dynamic LOD
+
+![](E:\Code\Vulcanite\images\dynamic_lod_basic.gif)

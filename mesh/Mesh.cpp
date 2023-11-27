@@ -649,7 +649,7 @@ void Mesh::initUniqueVertexBuffer() {
         v.pos = glm::vec3(mesh.point(vertex)[0], mesh.point(vertex)[1], mesh.point(vertex)[2]);
         v.normal = glm::vec3(mesh.normal(vertex)[0], mesh.normal(vertex)[1], mesh.normal(vertex)[2]);
         v.uv = glm::vec2(mesh.texcoord2D(vertex)[0], mesh.texcoord2D(vertex)[1]);
-        v.joint0 = glm::vec4(0.0f);
+        v.joint0 = glm::vec4(lodLevel);
         v.weight0 = glm::vec4(0.0f);
         uniqueVertexBuffer.emplace_back(v);
     }

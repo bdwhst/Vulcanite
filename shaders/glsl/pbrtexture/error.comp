@@ -44,13 +44,14 @@ float getScreenBoundRadiusSq(vec3 center, float R)
     vec4 p1 = ubomats.proj*ubomats.view*vec4(R*ubomats.camRight+center,1);
     p1.xy/=p1.w;
     p1.xy=p1.xy*0.5+0.5;
-    vec2 v0 = (p0-c)*pcs.screenSize;
-    vec2 v1 = (p1-c)*pcs.screenSize;
+    vec2 v0 = (p0.xy-c.xy)*pcs.screenSize;
+    vec2 v1 = (p1.xy-c.xy)*pcs.screenSize;
     return max(dot(v0,v0),dot(v1,v1));
 }
 
 void main()
 {
+    uint index = gl_GlobalInvocationID.x;
     if(index >= pcs.numClusters) return;
     ErrorInfo error = idata[index];
     vec3 center;

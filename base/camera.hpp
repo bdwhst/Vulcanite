@@ -146,6 +146,26 @@ public:
 		this->movementSpeed = movementSpeed;
 	}
 
+	glm::vec3 getFront()//TODO: cache this
+	{
+		glm::vec3 camFront;
+		camFront.x = -cos(glm::radians(rotation.x)) * sin(glm::radians(rotation.y));
+		camFront.y = sin(glm::radians(rotation.x));
+		camFront.z = cos(glm::radians(rotation.x)) * cos(glm::radians(rotation.y));
+		camFront = glm::normalize(camFront);
+		return camFront;
+	}
+
+	glm::vec3 getRight()
+	{
+		return glm::normalize(glm::cross(getFront(), getUp()));
+	}
+
+	glm::vec3 getUp()
+	{
+		return glm::vec3(0.0f, 1.0f, 0.0f);
+	}
+
 	void update(float deltaTime)
 	{
 		updated = false;
@@ -153,11 +173,7 @@ public:
 		{
 			if (moving())
 			{
-				glm::vec3 camFront;
-				camFront.x = -cos(glm::radians(rotation.x)) * sin(glm::radians(rotation.y));
-				camFront.y = sin(glm::radians(rotation.x));
-				camFront.z = cos(glm::radians(rotation.x)) * cos(glm::radians(rotation.y));
-				camFront = glm::normalize(camFront);
+				glm::vec3 camFront = getFront();
 
 				float moveSpeed = deltaTime * movementSpeed;
 
@@ -188,11 +204,7 @@ public:
 			const float deadZone = 0.0015f;
 			const float range = 1.0f - deadZone;
 
-			glm::vec3 camFront;
-			camFront.x = -cos(glm::radians(rotation.x)) * sin(glm::radians(rotation.y));
-			camFront.y = sin(glm::radians(rotation.x));
-			camFront.z = cos(glm::radians(rotation.x)) * cos(glm::radians(rotation.y));
-			camFront = glm::normalize(camFront);
+			glm::vec3 camFront = getFront();
 
 			float moveSpeed = deltaTime * movementSpeed * 2.0f;
 			float rotSpeed = deltaTime * rotationSpeed * 50.0f;

@@ -53,6 +53,9 @@ public:
 	VkPipelineLayout cullingPipelineLayout;
 	VkPipeline cullingPipeline;
 
+	VkPipelineLayout errorProjPipelineLayout;
+	VkPipeline errorProjPipeline;
+
 	
 
 	VkSampler depthStencilSampler;
@@ -70,6 +73,7 @@ public:
 	Instance instance1;
 
 	std::vector<ClusterInfo> clusterinfos;
+	std::vector<ErrorInfo> errorinfos;
 
 	struct {
 		vks::Buffer object;
@@ -93,6 +97,13 @@ public:
 		glm::mat4 lastView;
 		glm::mat4 lastProj;
 	}uboCullingMatrices;
+
+	struct UBOErrorMatrices {
+		glm::mat4 view;
+		glm::mat4 proj;
+		alignas(16) glm::vec3 camUp;
+		alignas(16) glm::vec3 camRight;
+	}uboErrorMatrices;
 
 	glm::mat4 model0 = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 3)), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 model1 = glm::scale(glm::mat4(1.0f), glm::vec3(0.2f, 0.2f, 0.03f));
@@ -126,8 +137,14 @@ public:
 	vks::Buffer cullingUniformBuffer;
 	vks::Buffer drawIndexedIndirectBuffer;
 
+	struct ErrorPushConstants {
+		alignas(4) int numClusters;
+		alignas(8) glm::vec2 screenSize;
+	} errorPushConstants;
+
 	vks::Buffer errorInfoBuffer;
 	vks::Buffer projectedErrorBuffer;
+	vks::Buffer errorUniformBuffer;
 
 	VkPipelineLayout pipelineLayout;
 
@@ -205,6 +222,36 @@ public:
 
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
 
+			VkBufferMemoryBarrier bufferBarrier = {};
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = projectedErrorBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, errorProjPipeline);
+			errorPushConstants.numClusters = clusterinfos.size();
+			errorPushConstants.screenSize = glm::vec2(width, height);
+			vkCmdPushConstants(drawCmdBuffers[i], errorProjPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ErrorPushConstants), &errorPushConstants);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, errorProjPipelineLayout, 0, 1, &descManager->getSet("errorProj", 0), 0, 0);
+			vkCmdDispatch(drawCmdBuffers[i], (errorPushConstants.numClusters + 31) / 32, 1, 1);
+
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = projectedErrorBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
 			VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
 			imageMemBarrier.image = textures.hizbuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -237,7 +284,7 @@ public:
 			imageMemBarrier.subresourceRange.layerCount = 1;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
-			VkBufferMemoryBarrier bufferBarrier = {};
+			bufferBarrier = {};
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
@@ -517,10 +564,17 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5)
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6)
 		};
 		manager->addSetLayout("culling", setLayoutBindings, 1);
 
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
+		};
+		manager->addSetLayout("errorProj", setLayoutBindings, 1);
 
 		manager->createLayoutsAndSets(device);
 
@@ -614,6 +668,7 @@ public:
 		culledIndicesBuffer.setupDescriptor();
 		drawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
+		projectedErrorBuffer.setupDescriptor();
 		VkDescriptorBufferInfo inputIndicesInfo{};
 		inputIndicesInfo.buffer = instance1.indices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
@@ -623,6 +678,16 @@ public:
 		manager->writeToSet("culling", 0, 3, &drawIndexedIndirectBuffer.descriptor);
 		manager->writeToSet("culling", 0, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
+		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
+
+		//Error projection
+		errorInfoBuffer.setupDescriptor();
+		projectedErrorBuffer.setupDescriptor();
+		errorUniformBuffer.setupDescriptor();
+		manager->writeToSet("errorProj", 0, 0, &errorInfoBuffer.descriptor);
+		manager->writeToSet("errorProj", 0, 1, &projectedErrorBuffer.descriptor);
+		manager->writeToSet("errorProj", 0, 2, &errorUniformBuffer.descriptor);
+
 	}
 
 	void preparePipelines()
@@ -744,6 +809,24 @@ public:
 			pipelineCreateInfo.stage = computeShaderStage;
 			pipelineCreateInfo.layout = cullingPipelineLayout;
 			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &cullingPipeline));
+		}
+
+		{
+			//Error projection pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/error.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			VkPushConstantRange push_constant{};
+			push_constant.size = sizeof(ErrorPushConstants);
+			push_constant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("errorProj"), 1);
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &errorProjPipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = errorProjPipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &errorProjPipeline));
 		}
 	}
 
@@ -1722,8 +1805,8 @@ public:
 		
 		for (auto& ci:instance1.clusterInfo)
 		{
-			assert(ci.triangleIndicesEnd >= 0 && ci.triangleIndicesEnd <= models.object.indices.count/3);
-			assert(ci.triangleIndicesStart >= 0 && ci.triangleIndicesStart < models.object.indices.count / 3);
+			assert(ci.triangleIndicesEnd >= 0 && ci.triangleIndicesEnd <= instance1.indices.count / 3);
+			assert(ci.triangleIndicesStart >= 0 && ci.triangleIndicesStart < instance1.indices.count / 3);
 			assert(ci.triangleIndicesStart < ci.triangleIndicesEnd);
 			clusterinfos.emplace_back(ci);
 		}
@@ -1792,9 +1875,61 @@ public:
 		VK_CHECK_RESULT(drawIndexedIndirectBuffer.map());
 	}
 
-	void createErrorBuffer()
+	void createErrorProjectionBuffer()
 	{
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			instance1.errorInfo.size() * sizeof(glm::vec2),
+			&projectedErrorBuffer.buffer,
+			&projectedErrorBuffer.memory,
+			nullptr));
 
+		for (auto& ei : instance1.errorInfo)
+		{
+			errorinfos.emplace_back(ei);
+		}
+		vks::Buffer errorStaging;
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			errorinfos.size() * sizeof(ErrorInfo),
+			&errorStaging.buffer,
+			&errorStaging.memory,
+			errorinfos.data()));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			errorinfos.size() * sizeof(ErrorInfo),
+			&errorInfoBuffer.buffer,
+			&errorInfoBuffer.memory,
+			nullptr));
+		VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkBufferCopy copyRegion = {};
+
+		copyRegion.size = errorinfos.size() * sizeof(ErrorInfo);
+		vkCmdCopyBuffer(copyCmd, errorStaging.buffer, errorInfoBuffer.buffer, 1, &copyRegion);
+
+		vulkanDevice->flushCommandBuffer(copyCmd, queue, true);//TODO: get transfer queue here
+
+		vkDestroyBuffer(vulkanDevice->logicalDevice, errorStaging.buffer, nullptr);
+		vkFreeMemory(vulkanDevice->logicalDevice, errorStaging.memory, nullptr);
+
+		uboErrorMatrices.view = camera.matrices.view;
+		uboErrorMatrices.proj = camera.matrices.perspective;
+		uboErrorMatrices.camRight = camera.getRight();
+		uboErrorMatrices.camUp = camera.getUp();
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			sizeof(UBOErrorMatrices),
+			&errorUniformBuffer.buffer,
+			&errorUniformBuffer.memory,
+			&uboErrorMatrices));
+		errorUniformBuffer.device = device;
+		VK_CHECK_RESULT(errorUniformBuffer.map());
 	}
 
 	void createHiZBuffer()
@@ -1983,6 +2118,12 @@ public:
 
 		uboMatrices2.model = glm::mat4(glm::mat3(uboMatrices2.view));
 		memcpy(uniformBuffers.topSkybox.mapped, &uboMatrices2, sizeof(uboMatrices2));
+
+		uboErrorMatrices.view = camera.matrices.view;
+		uboErrorMatrices.proj = camera.matrices.perspective;
+		uboErrorMatrices.camRight = camera.getRight();
+		uboErrorMatrices.camUp = camera.getUp();
+		memcpy(errorUniformBuffer.mapped, &uboErrorMatrices, sizeof(UBOErrorMatrices));
 	}
 
 	void updateParams()
@@ -2095,6 +2236,7 @@ public:
 		generateIrradianceCube();
 		generatePrefilteredCube();
 		createCullingBuffers();
+		createErrorProjectionBuffer();
 		createHiZBuffer();
 		prepareUniformBuffers();
 		setupDescriptors();

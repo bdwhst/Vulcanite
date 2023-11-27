@@ -141,7 +141,6 @@ void NaniteMesh::generateNaniteInfo() {
 	//  mymesh.n_faces() != currFaceNum // Decimation no longer decrease faces
 	//); 
 	while (--target); // Only do one time for testing
-
 	// Linearize DAG
 	flattenDAG();
 	// Save mesh for debugging

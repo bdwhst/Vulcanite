@@ -12,12 +12,6 @@ struct Cluster
     uint triangleEnd;
 };
 
-struct ErrorInfo
-{
-    float clusterError;
-    float parentError;
-};
-
 
 layout(std430, set = 0, binding = 0) buffer readonly ClustersIn {
    Cluster indata[ ];
@@ -46,6 +40,10 @@ layout(set = 0, binding = 4) uniform UBOMats {
 } ubomats;
 
 layout(set = 0, binding = 5) uniform sampler2D lastHZB;
+
+layout(std430, set = 0, binding = 6) buffer readonly ProjectedError {
+   vec2 errorData[ ];
+};
 
 layout(push_constant) uniform PushConstants {
     int numClusters;
@@ -121,6 +119,8 @@ bool frustrumCulling(vec3 pos, mat4 currView, mat4 currProj)
     return hpos.x>-1.1&&hpos.x<1.1&&hpos.y>-1.1&&hpos.y<1.1&&hpos.z>-1.1&&hpos.z<1.1;
 }
 
+const float threshold = 1e-4;
+
 void main()
 {
     uint index = gl_GlobalInvocationID.x;
@@ -146,6 +146,8 @@ void main()
     // float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
     // float maxHiz = max(max(z1,z2),max(z3,z4));
     // if(minZ>maxHiz+0.02) culled = true;
+
+    culled = culled || (errorData[index].y <= threshold||errorData[index].x > threshold);
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;

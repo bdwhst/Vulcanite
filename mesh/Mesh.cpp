@@ -110,7 +110,7 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
         }
         cluster.childMaxLODError = std::max(cluster.childMaxLODError, .0);
         ASSERT(cluster.childMaxLODError >= 0, "cluster.childMaxLODError < 0");
-        ASSERT(cluster.qemError >= 0, "cluster.qemError < 0");
+        ASSERT(cluster.qemError > 0, "cluster.qemError <= 0");
         cluster.lodError = cluster.qemError + cluster.childMaxLODError;
         for (int idx : cluster.childClusterIndices)
         {
@@ -120,9 +120,8 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
             ASSERT(cluster.surfaceArea > DBL_EPSILON, "cluster.surfaceArea <= 0");
             childCluster.parentError = cluster.lodError;
             childCluster.parentSurfaceArea = cluster.surfaceArea;
-            cluster.boundingSphereRadius = glm::max(cluster.boundingSphereRadius, childCluster.boundingSphereRadius);
+            cluster.boundingSphereRadius = glm::max(cluster.boundingSphereRadius, childCluster.boundingSphereRadius * 4.0f);
         }
-
     }
 }
 

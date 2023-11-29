@@ -127,20 +127,28 @@ vec3 calculateNormal()
 	return normalize(TBN * tangentNormal);
 }
 
+layout(push_constant) uniform PushConstants {
+    int vis_clusters;
+} pcs;
+
 void main()
 {		
-	//int clusterId = int(inClusterInfos.w);
-	//vec3 clusterColor = inClusterInfos.xyz;
-	//// Only set this for convenience, no physical meaning
-	//if (uboParams.gamma < 2.15){
-	//	outColor = vec4(inClusterGroupInfos.xyz, 1.0); // Uncomment this line to see Cluster visualization
-	//}
-	//else{
-	//	outColor = vec4(inClusterInfos.xyz, 1.0); // Uncomment this line to see ClusterGroup visualization
-	//}
-	////outColor = vec4(1.0);
-	//return;
+	if(pcs.vis_clusters==1)
+	{
+		int clusterId = int(inClusterInfos.w);
+		vec3 clusterColor = inClusterInfos.xyz;
+		// Only set this for convenience, no physical meaning
+		if (uboParams.gamma < 2.15){
+			outColor = vec4(inClusterGroupInfos.xyz, 1.0); // Uncomment this line to see Cluster visualization
+		}
+		else{
+			outColor = vec4(inClusterInfos.xyz, 1.0); // Uncomment this line to see ClusterGroup visualization
+		}
+		//outColor = vec4(1.0);
+		return;
+	}
 	//vec3 N = calculateNormal();
+
 	if(inClusterInfos.x<0.5)
 		outColor = vec4(vec3(1.0,0.0,0.0),1.0);
 	else if(inClusterInfos.x<1.5)
@@ -148,6 +156,7 @@ void main()
 	else if(inClusterInfos.x<2.5)
 		outColor = vec4(vec3(0.0,0.0,1.0),1.0);
 	return;
+
 	vec3 N = inNormal;
 
 	vec3 V = normalize(ubo.camPos - inWorldPos);

@@ -132,6 +132,10 @@ public:
 		int numClusters;
 	} cullingPushConstants;
 
+	struct RenderingPushConstants {
+		int vis_clusters;
+	} renderingPushConstants;
+
 	vks::Buffer culledIndicesBuffer;
 	vks::Buffer clustersInfoBuffer;
 	vks::Buffer cullingUniformBuffer;
@@ -147,6 +151,8 @@ public:
 	vks::Buffer errorUniformBuffer;
 
 	VkPipelineLayout pipelineLayout;
+
+	int vis_clusters_level = 0;
 
 	VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
 	{
@@ -320,6 +326,7 @@ public:
 			{
 				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 4), 0, NULL);
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
 
@@ -330,10 +337,18 @@ public:
 			//models.object.draw(drawCmdBuffers[i]);
 
 			//TODO: support multiple primitives in a model
-			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &instance1.vertices.buffer, offsets);
-			vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-			//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			if (!renderingPushConstants.vis_clusters)
+			{
+				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &instance1.vertices.buffer, offsets);
+				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+				//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			}
+			else
+			{
+				naniteMesh.meshes[vis_clusters_level].draw(drawCmdBuffers[i], 0, nullptr, 1);
+			}
 
 			/*vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);*/
@@ -507,6 +522,8 @@ public:
 		for (int i = 0; i < naniteMesh.meshes.size(); i++)
 		{
 			naniteMesh.meshes[i].initUniqueVertexBuffer();
+			naniteMesh.meshes[i].initVertexBuffer();
+			naniteMesh.meshes[i].createVertexBuffer(vulkanDevice, queue);
 		}
 		instance1 = Instance(&naniteMesh, model0);
 		instance1.createBuffersForNaniteLODs(vulkanDevice, queue);
@@ -706,7 +723,12 @@ public:
 
 		auto descManager = VulkanDescriptorSetManager::getManager();
 		// Pipeline layout
+		VkPushConstantRange push_constant{};
+		push_constant.size = sizeof(RenderingPushConstants);
+		push_constant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 		VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("objectDraw"), 1);
+		pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+		pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
 		VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout));
 
 		// Pipelines
@@ -736,7 +758,7 @@ public:
 
 		// PBR pipeline
 		rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-		rasterizationState.polygonMode = VK_POLYGON_MODE_LINE;
+		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
 		//rasterizationState.cullMode = VK_CULL_MODE_NONE;
 		shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 		shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -2124,6 +2146,7 @@ public:
 		uboErrorMatrices.camRight = camera.getRight();
 		uboErrorMatrices.camUp = camera.getUp();
 		memcpy(errorUniformBuffer.mapped, &uboErrorMatrices, sizeof(UBOErrorMatrices));
+		errorUniformBuffer.flush();
 	}
 
 	void updateParams()
@@ -2147,7 +2170,7 @@ public:
 			drawIndexedIndirect.indexCount = 0;
 			memcpy(drawIndexedIndirectBuffer.mapped, &drawIndexedIndirect, sizeof(DrawIndexedIndirect));
 			drawIndexedIndirectBuffer.flush();
-			vkDeviceWaitIdle(device);
+			//vkDeviceWaitIdle(device);
 		}
 
 		submitInfo.commandBufferCount = 1;
@@ -2271,6 +2294,13 @@ public:
 				updateParams();
 			}
 			if (overlay->checkBox("Skybox", &displaySkybox)) {
+				buildCommandBuffers();
+			}
+			if (overlay->checkBox("Visualize Clutsers", &renderingPushConstants.vis_clusters)) {
+				buildCommandBuffers();
+			}
+			if (overlay->sliderInt("LOD level", &vis_clusters_level, 0, naniteMesh.meshes.size() - 1))
+			{
 				buildCommandBuffers();
 			}
 		}

@@ -181,10 +181,10 @@ void NaniteMesh::serialize(const std::string& filepath)
 	}
 
 	json result;
-	for (size_t i = 0; i < flattenedClusterNodes.size(); i++)
-	{
-		result["flattenedClusterNodes"][i] = flattenedClusterNodes[i].toJson();
-	}
+	//for (size_t i = 0; i < flattenedClusterNodes.size(); i++)
+	//{
+	//	result["flattenedClusterNodes"][i] = flattenedClusterNodes[i].toJson();
+	//}
 	for (size_t i = 0; i < meshes.size(); i++)
 	{
 		result["mesh"][i] = meshes[i].toJson();

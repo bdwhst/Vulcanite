@@ -511,6 +511,11 @@ json Mesh::toJson()
         {"triangleIndicesSortedByClusterIdx", triangleIndicesSortedByClusterIdx},
         {"triangleVertexIndicesSortedByClusterIdx", triangleVertexIndicesSortedByClusterIdx}
     };
+
+    for (size_t i = 0; i < clusters.size(); i++)
+    {
+        result["clusters"].push_back(clusters[i].toJson());
+    }
     return result;
 }
 
@@ -520,6 +525,12 @@ void Mesh::fromJson(const json& j)
     triangleClusterIndex = j["triangleClusterIndex"].get<std::vector<int>>();
     triangleIndicesSortedByClusterIdx = j["triangleIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
     triangleVertexIndicesSortedByClusterIdx = j["triangleVertexIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
+    
+    clusters.resize(clusterNum);
+    for (size_t i = 0; i < clusters.size(); i++)
+    {
+        clusters[i].fromJson(j["clusters"][i]);
+    }
 }
 
 

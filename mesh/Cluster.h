@@ -21,6 +21,43 @@ struct Cluster{
     float parentSurfaceArea = 0.0f;
     glm::vec3 boundingSphereCenter;
     float boundingSphereRadius;
+
+    json toJson() const {
+        return {
+            {"parentError", parentError},
+            {"lodError", lodError},
+            {"boundingSphereCenter", {boundingSphereCenter.x, boundingSphereCenter.y, boundingSphereCenter.z}},
+            {"boundingSphereRadius", boundingSphereRadius},
+            {"parentClusterIndices", parentClusterIndices}
+        };
+    }
+
+    void fromJson(const json& j) {
+        if (j.find("parentError") != j.end()) {
+            parentError = j["parentError"].get<double>();
+        }
+
+        if (j.find("lodError") != j.end()) {
+            lodError = j["lodError"].get<double>();
+        }
+
+        if (j.find("boundingSphereCenter") != j.end() && j["boundingSphereCenter"].is_array() && j["boundingSphereCenter"].size() == 3) {
+            boundingSphereCenter.x = j["boundingSphereCenter"][0].get<float>();
+            boundingSphereCenter.y = j["boundingSphereCenter"][1].get<float>();
+            boundingSphereCenter.z = j["boundingSphereCenter"][2].get<float>();
+        }
+
+        //if (j.contains("boundingSphereRadius")) {
+        if (j.find("boundingSphereRadius") != j.end()) {
+            boundingSphereRadius = j["boundingSphereRadius"].get<double>();
+        }
+
+        if (j.find("parentClusterIndices") != j.end() && j["parentClusterIndices"].is_array()) {
+            for (auto& idx : j["parentClusterIndices"]) {
+				parentClusterIndices.emplace_back(idx.get<uint32_t>());
+			}
+		}
+    }
 };
 
 struct ClusterNode {

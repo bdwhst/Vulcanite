@@ -166,6 +166,10 @@ public:
 		return glm::vec3(0.0f, 1.0f, 0.0f);
 	}
 
+	glm::mat4 getOrthogonal() {
+		return glm::ortho(-1.0f, 1.0f, -1.0f, 1.0f);
+	}
+
 	void update(float deltaTime)
 	{
 		updated = false;

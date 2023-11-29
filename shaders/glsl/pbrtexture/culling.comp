@@ -146,8 +146,15 @@ void main()
     // float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
     // float maxHiz = max(max(z1,z2),max(z3,z4));
     // if(minZ>maxHiz+0.02) culled = true;
-
-    culled = culled || (errorData[index].y <= threshold||errorData[index].x > threshold);
+    Cluster currCluster = indata[index];
+    vec3 pos = ubomats.model[0].xyz;
+    vec3 modelPos = ubomats.model[1].xyz;
+    //float distance = length(pos - (currCluster.pMin + currCluster.pMax) * 0.5);
+    float distance = length(pos-modelPos);
+    //vec2 err = errorData[index] / (distance*distance);
+    vec2 err = errorData[index] / (distance*distance);
+    culled = culled || (err.y <= threshold||err.x > threshold);
+    //culled = culled || (errorData[index].y <= threshold||errorData[index].x > threshold);
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;

@@ -2142,7 +2142,8 @@ public:
 		memcpy(uniformBuffers.topSkybox.mapped, &uboMatrices2, sizeof(uboMatrices2));
 
 		uboErrorMatrices.view = camera.matrices.view;
-		uboErrorMatrices.proj = camera.matrices.perspective;
+		//uboErrorMatrices.proj = camera.matrices.perspective;
+		uboErrorMatrices.proj = camera.getOrthogonal();
 		uboErrorMatrices.camRight = camera.getRight();
 		uboErrorMatrices.camUp = camera.getUp();
 		memcpy(errorUniformBuffer.mapped, &uboErrorMatrices, sizeof(UBOErrorMatrices));
@@ -2177,7 +2178,12 @@ public:
 		submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
 		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
 		VulkanExampleBase::submitFrame();
-
+		auto pos = glm::mat4(1.0f);
+		pos[0] = glm::vec4(camera.position, 1.0f);
+		pos[1] = glm::vec4(0.12, 0.5, -3.26, 1.0f);
+		//printf("%f\n", glm::distance(pos[0], pos[1]));
+		//printf("%f %f %f \n", camera.position.x, camera.position.y, camera.position.z);
+		uboCullingMatrices.model = pos;
 		uboCullingMatrices.lastView = camera.matrices.view;
 		uboCullingMatrices.lastProj = camera.matrices.perspective;
 		memcpy(cullingUniformBuffer.mapped, &uboCullingMatrices, sizeof(uboCullingMatrices));

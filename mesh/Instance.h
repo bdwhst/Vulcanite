@@ -37,6 +37,7 @@ struct Instance {
     //TODO: avoid duplication when there are multiple instances of the same model
     vkglTF::Model::Vertices vertices;
     vkglTF::Model::Indices indices;
+    glm::vec3 center = glm::vec3(0.0, 0.0, 0.0);
     Instance(){}
     Instance(NaniteMesh* mesh, const glm::mat4 model):referenceMesh(mesh), rootTransform(model){}
     void createBuffersForNaniteLODs(vks::VulkanDevice* device, VkQueue transferQueue)
@@ -198,12 +199,17 @@ struct Instance {
                 p0 = glm::vec3(rootTransform * glm::vec4(p0, 1.0f));
                 p1 = glm::vec3(rootTransform * glm::vec4(p1, 1.0f));
                 p2 = glm::vec3(rootTransform * glm::vec4(p2, 1.0f));
-
+                
+                center += p0;
+                center += p1;
+                center += p2;
+                
                 getTriangleAABB(p0, p1, p2, pMinWorld, pMaxWorld);
 
                 clusterI.mergeAABB(pMinWorld, pMaxWorld);
             }
 
+            center /= referenceMesh->meshes[i].mesh.n_faces() * 3;
 
             uint32_t currClusterIdx = -1;
             for (size_t j = 0; j < referenceMesh->meshes[i].triangleIndicesSortedByClusterIdx.size(); j++)

@@ -233,6 +233,7 @@ void NaniteMesh::deserialize(const std::string & filepath)
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
 		if (!OpenMesh::IO::read_mesh(meshes[i].mesh, output_filename)) {
 			ASSERT(0, "failed to load mesh");
+			ASSERT(meshes[i].mesh.has_vertex_normals(), "mesh has no normals");
 		}
 		meshes[i].lodLevel = i;
 	}

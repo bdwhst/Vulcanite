@@ -546,6 +546,7 @@ json Mesh::toJson()
     json result = {
         {"clusterNum", clusterNum},
         {"triangleClusterIndex", triangleClusterIndex},
+        {"clusterColorAssignment", clusterColorAssignment},
         {"clusterGroupIndex", clusterGroupIndex},
         {"triangleIndicesSortedByClusterIdx", triangleIndicesSortedByClusterIdx},
         {"triangleVertexIndicesSortedByClusterIdx", triangleVertexIndicesSortedByClusterIdx}
@@ -561,6 +562,7 @@ json Mesh::toJson()
 void Mesh::fromJson(const json& j)
 {
     clusterNum = j["clusterNum"].get<int>();
+    clusterColorAssignment = j["clusterColorAssignment"].get<std::unordered_map<int, int>>();
     triangleClusterIndex = j["triangleClusterIndex"].get<std::vector<int>>();
     clusterGroupIndex = j["clusterGroupIndex"].get<std::vector<int>>();
     triangleIndicesSortedByClusterIdx = j["triangleIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();

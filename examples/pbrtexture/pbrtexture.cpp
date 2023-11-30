@@ -127,9 +127,12 @@ public:
 		VkPipeline pbr;
 	} pipelines;
 
+	int thresholdInt = 500;
+	double thresholdIntDiv = 1e6;
 
 	struct CullingPushConstants {
 		int numClusters;
+		float threshold;
 	} cullingPushConstants;
 
 	struct RenderingPushConstants {
@@ -273,6 +276,7 @@ public:
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
+			cullingPushConstants.threshold = thresholdInt / thresholdIntDiv;
 			cullingPushConstants.numClusters = clusterinfos.size();
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &descManager->getSet("culling", 0), 0, 0);
@@ -337,7 +341,7 @@ public:
 			//models.object.draw(drawCmdBuffers[i]);
 
 			//TODO: support multiple primitives in a model
-			if (!renderingPushConstants.vis_clusters)
+			if (renderingPushConstants.vis_clusters != 2)
 			{
 				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &instance1.vertices.buffer, offsets);
 				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
@@ -2296,7 +2300,11 @@ public:
 			if (overlay->checkBox("Skybox", &displaySkybox)) {
 				buildCommandBuffers();
 			}
-			if (overlay->checkBox("Visualize Clutsers", &renderingPushConstants.vis_clusters)) {
+			if (overlay->sliderInt("Threshold", &thresholdInt, 0, 1000))
+			{
+				buildCommandBuffers();
+			}
+			if (overlay->sliderInt("Visualize Clutsers", &renderingPushConstants.vis_clusters,0,2)) {
 				buildCommandBuffers();
 			}
 			if (overlay->sliderInt("LOD level", &vis_clusters_level, 0, naniteMesh.meshes.size() - 1))

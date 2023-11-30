@@ -59,10 +59,10 @@ void main()
 
     center = error.centerR.xyz;
     R = error.centerR.w;
-    odata[index].x = error.errorWorld.x * getScreenBoundRadiusSq(center,R)/(R*R);
+    odata[index].x = error.errorWorld.x * getScreenBoundRadiusSq(center,R);
 
     center = error.centerRP.xyz;
     R = error.centerRP.w;
-    odata[index].y = error.errorWorld.y * getScreenBoundRadiusSq(center,R)/(R*R);
+    odata[index].y = error.errorWorld.y * getScreenBoundRadiusSq(center,R);
 }
 

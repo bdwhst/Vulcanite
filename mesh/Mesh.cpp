@@ -96,31 +96,40 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
             clusters[newClusterIndex].qemError = oldClusterGroup.qemError;
         }
     }
+    for (auto& cluster : clusters)
+    {
+        calcBoundingSphereFromChildren(cluster, lastLOD);
+        calcSurfaceArea(cluster);
+        for (int idx : cluster.childClusterIndices)
+        {
+            auto& childCluster = lastLOD.clusters[idx];
+            cluster.boundingSphereRadius = glm::max(cluster.boundingSphereRadius, childCluster.boundingSphereRadius * 2.0f);
+        }
+    }
 
     for (auto & cluster:clusters)
     {
-        getBoundingSphere(cluster);
-        calcSurfaceArea(cluster);
-
         cluster.lodLevel = lodLevel;
+        double maxChildNormalizedError = 0.0;
         for (int idx: cluster.childClusterIndices)
         {
             const auto& childCluster = lastLOD.clusters[idx];
-            cluster.childMaxLODError = std::max(cluster.childMaxLODError, childCluster.lodError);
+            cluster.childLODErrorMax = std::max(cluster.childLODErrorMax, childCluster.lodError);
+            maxChildNormalizedError = std::max(maxChildNormalizedError, childCluster.normalizedlodError);
         }
-        cluster.childMaxLODError = std::max(cluster.childMaxLODError, .0);
-        ASSERT(cluster.childMaxLODError >= 0, "cluster.childMaxLODError < 0");
+        cluster.childLODErrorMax = std::max(cluster.childLODErrorMax, .0);
+        ASSERT(cluster.childLODErrorMax >= 0, "cluster.childMaxLODError < 0");
         ASSERT(cluster.qemError > 0, "cluster.qemError <= 0");
-        cluster.lodError = cluster.qemError + cluster.childMaxLODError;
+        cluster.lodError = cluster.qemError + cluster.childLODErrorMax;
+        cluster.normalizedlodError = std::max(maxChildNormalizedError + 1e-9, cluster.lodError / (cluster.boundingSphereRadius * cluster.boundingSphereRadius));
         for (int idx : cluster.childClusterIndices)
         {
             auto& childCluster = lastLOD.clusters[idx];
             // All parent error should be the same
-            ASSERT(childCluster.parentError < 0 || abs(childCluster.parentError - cluster.lodError) < FLT_EPSILON, "Parents have different lod error");
+            ASSERT(childCluster.parentNormalizedError < 0 || abs(childCluster.parentNormalizedError - cluster.normalizedlodError) < FLT_EPSILON, "Parents have different lod error");
             ASSERT(cluster.surfaceArea > DBL_EPSILON, "cluster.surfaceArea <= 0");
-            childCluster.parentError = cluster.lodError;
+            childCluster.parentNormalizedError = cluster.normalizedlodError;
             childCluster.parentSurfaceArea = cluster.surfaceArea;
-            cluster.boundingSphereRadius = glm::max(cluster.boundingSphereRadius, childCluster.boundingSphereRadius * 4.0f);
         }
     }
 }
@@ -176,7 +185,7 @@ void Mesh::generateCluster()
     //clusterNum = (triangleMetisGraph.nvtxs + clusterSize - 1) / clusterSize;
     if (clusterNum == 1) 
     {
-    
+        
     }
     // Set fixed target cluster size
     real_t* tpwgts = (real_t*)malloc(ncon * clusterNum * sizeof(real_t)); // We need to set a weight for each partition
@@ -396,6 +405,28 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
     mymesh.garbage_collection();
     size_t actual_faces = mymesh.n_faces();
     std::cout << "NUM FACES AFTER: " << actual_faces << std::endl;
+}
+
+void Mesh::calcBoundingSphereFromChildren(Cluster& cluster, Mesh& lastLOD)
+{
+    glm::vec3 center = glm::vec3(0);
+    float max_radius = 0.0;
+    for (auto& i : cluster.childClusterIndices)
+    {
+        auto& childCluster = lastLOD.clusters[i];
+        center += childCluster.boundingSphereCenter;
+        max_radius = std::max(max_radius, childCluster.boundingSphereRadius);
+    }
+    center /= cluster.childClusterIndices.size();
+    float max_dist = 0;
+    for (auto& i : cluster.childClusterIndices)
+    {
+        auto& childCluster = lastLOD.clusters[i];
+        max_dist = std::max(max_dist, glm::distance(center, childCluster.boundingSphereCenter));
+    }
+    max_dist += max_radius;
+    cluster.boundingSphereCenter = center;
+    cluster.boundingSphereRadius = max_dist;
 }
 
 void Mesh::getBoundingSphere(Cluster& cluster)

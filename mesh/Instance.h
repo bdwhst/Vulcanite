@@ -225,18 +225,19 @@ struct Instance {
             for (size_t j = 0; j < referenceMesh->meshes[i].clusters.size(); j++)
             {
                 auto& cluster = referenceMesh->meshes[i].clusters[j];
-                float parentError = i == referenceMesh->meshes.size() - 1 ? 1e5 : cluster.parentError;
-                errorInfo[j + currClusterNum].errorWorld = glm::vec2(cluster.lodError, parentError);
+                float parentError = i == referenceMesh->meshes.size() - 1 ? 1e5 : cluster.parentNormalizedError;
+                ASSERT(parentError > cluster.normalizedlodError, "Parent error is not greater than children's");
+                errorInfo[j + currClusterNum].errorWorld = glm::vec2(cluster.normalizedlodError, parentError);
                 glm::vec3 worldCenter = glm::vec3(rootTransform * glm::vec4(cluster.boundingSphereCenter, 1.0));
                 //TODO: handle arbitary scaling
-                float worldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(cluster.boundingSphereRadius,0,0), 0.0));
+                float worldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(cluster.boundingSphereRadius, 0, 0), 0.0));
                 assert(worldRadius > 0);
                 errorInfo[j + currClusterNum].centerR = glm::vec4(worldCenter, worldRadius);
-                float maxParentBoundingRadius = 0;
+                float parentBoundingRadius = 0;
                 glm::vec3 parentCenter = glm::vec3(0);
                 if (i == referenceMesh->meshes.size() - 1)//last level of lod, no parent
                 {
-                    maxParentBoundingRadius = worldRadius * 1.5f;
+                    parentBoundingRadius = worldRadius * 1.5f;
                     parentCenter = cluster.boundingSphereCenter;
                 }
                 /*else
@@ -246,7 +247,7 @@ struct Instance {
                 }*/
                 else for (size_t k : cluster.parentClusterIndices)//get max parent bounding sphere size
                 {
-                    maxParentBoundingRadius = std::max(maxParentBoundingRadius, referenceMesh->meshes[i + 1].clusters[k].boundingSphereRadius);
+                    parentBoundingRadius = std::max(parentBoundingRadius, referenceMesh->meshes[i + 1].clusters[k].boundingSphereRadius);
                     parentCenter += referenceMesh->meshes[i + 1].clusters[k].boundingSphereCenter;
                     //parentCenter = cluster.boundingSphereCenter;
                     break;
@@ -254,9 +255,9 @@ struct Instance {
                 //parentCenter /= i == referenceMesh->meshes.size() - 1 ? 1.0 : cluster.parentClusterIndices.size();
                 glm::vec3 parentWorldCenter = glm::vec3(rootTransform * glm::vec4(parentCenter, 1.0));
                 //TODO: handle arbitary scaling
-                float parentWorldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(maxParentBoundingRadius, 0, 0), 0.0));
+
                 assert(parentWorldRadius > 0 && parentWorldRadius > worldRadius);
-                errorInfo[j + currClusterNum].centerRP = glm::vec4(parentWorldCenter, parentWorldRadius);
+                errorInfo[j + currClusterNum].centerRP = glm::vec4(parentWorldCenter, parentBoundingRadius);
             }
             currClusterNum += referenceMesh->meshes[i].clusterNum;
             currTriangleNum += referenceMesh->meshes[i].triangleIndicesSortedByClusterIdx.size();

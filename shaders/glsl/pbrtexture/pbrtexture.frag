@@ -133,7 +133,7 @@ layout(push_constant) uniform PushConstants {
 
 void main()
 {		
-	if(pcs.vis_clusters==1)
+	if(pcs.vis_clusters==2)
 	{
 		int clusterId = int(inClusterInfos.w);
 		vec3 clusterColor = inClusterInfos.xyz;
@@ -147,15 +147,19 @@ void main()
 		//outColor = vec4(1.0);
 		return;
 	}
+	else if(pcs.vis_clusters==1)
+	{
+		if(inClusterInfos.x<0.5)
+			outColor = vec4(vec3(1.0,0.0,0.0),1.0);
+		else if(inClusterInfos.x<1.5)
+			outColor = vec4(vec3(0.0,1.0,0.0),1.0);
+		else if(inClusterInfos.x<2.5)
+			outColor = vec4(vec3(0.0,0.0,1.0),1.0);
+		return;
+	}
 	//vec3 N = calculateNormal();
 
-	if(inClusterInfos.x<0.5)
-		outColor = vec4(vec3(1.0,0.0,0.0),1.0);
-	else if(inClusterInfos.x<1.5)
-		outColor = vec4(vec3(0.0,1.0,0.0),1.0);
-	else if(inClusterInfos.x<2.5)
-		outColor = vec4(vec3(0.0,0.0,1.0),1.0);
-	return;
+	
 
 	vec3 N = inNormal;
 

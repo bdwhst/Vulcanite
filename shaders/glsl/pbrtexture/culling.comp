@@ -47,6 +47,7 @@ layout(std430, set = 0, binding = 6) buffer readonly ProjectedError {
 
 layout(push_constant) uniform PushConstants {
     int numClusters;
+    float threshold;
 } pcs;
 
 // Naive AABB compute
@@ -119,7 +120,6 @@ bool frustrumCulling(vec3 pos, mat4 currView, mat4 currProj)
     return hpos.x>-1.1&&hpos.x<1.1&&hpos.y>-1.1&&hpos.y<1.1&&hpos.z>-1.1&&hpos.z<1.1;
 }
 
-const float threshold = 1e-4;
 
 void main()
 {
@@ -147,7 +147,7 @@ void main()
     // float maxHiz = max(max(z1,z2),max(z3,z4));
     // if(minZ>maxHiz+0.02) culled = true;
 
-    culled = culled || (errorData[index].y <= threshold||errorData[index].x > threshold);
+    culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;

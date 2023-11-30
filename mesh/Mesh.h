@@ -41,6 +41,7 @@ public:
 	void simplifyMesh(MyMesh& mymesh);
 
 	void getBoundingSphere(Cluster & cluster);
+	void calcBoundingSphereFromChildren(Cluster& cluster, Mesh& lastLOD);
 	void calcSurfaceArea(Cluster& cluster);
 
 	json toJson();

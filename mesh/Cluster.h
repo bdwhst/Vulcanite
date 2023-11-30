@@ -12,8 +12,9 @@ struct Cluster{
     std::vector<uint32_t> childClusterIndices;
     double qemError = -1;
     double lodError = -1;
-    double childMaxLODError = -1;
-    double parentError = -1;
+    double normalizedlodError = -1;
+    double childLODErrorMax = 0.0;
+    double parentNormalizedError = -1;
     bool isLeaf = true;
     uint32_t lodLevel = -1;
 
@@ -24,7 +25,7 @@ struct Cluster{
 
     json toJson() const {
         return {
-            {"parentError", parentError},
+            {"parentError", parentNormalizedError},
             {"lodError", lodError},
             {"boundingSphereCenter", {boundingSphereCenter.x, boundingSphereCenter.y, boundingSphereCenter.z}},
             {"boundingSphereRadius", boundingSphereRadius},
@@ -34,7 +35,7 @@ struct Cluster{
 
     void fromJson(const json& j) {
         if (j.find("parentError") != j.end()) {
-            parentError = j["parentError"].get<double>();
+            parentNormalizedError = j["parentError"].get<double>();
         }
 
         if (j.find("lodError") != j.end()) {

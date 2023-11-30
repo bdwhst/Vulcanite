@@ -142,7 +142,9 @@ void NaniteMesh::generateNaniteInfo() {
 	//); 
 	while (--target); // Only do one time for testing
 	// Linearize DAG
-	flattenDAG();
+	
+	//flattenDAG();
+	
 	// Save mesh for debugging
 	//{
 	//	std::string output_filename = "output.obj";
@@ -191,7 +193,7 @@ void NaniteMesh::serialize(const std::string& filepath)
 	}
 	result[cache_time_key] = std::time(nullptr);
 	result["lodNums"] = lodNums;
-	result["clusterNodeSize"] = flattenedClusterNodes.size();
+
 	// Save the JSON data to a file
 	std::ofstream file(std::string(filepath) + "nanite_info.json");
 	if (file.is_open()) {
@@ -210,11 +212,11 @@ void NaniteMesh::deserialize(const std::string & filepath)
 		json loadedJson;
 		inputFile >> loadedJson;
 
-		for (const auto& element : loadedJson["flattenedClusterNodes"]) {
-			ClusterNode node;
-			node.fromJson(element);
-			flattenedClusterNodes.push_back(node);
-		}
+		//for (const auto& element : loadedJson["flattenedClusterNodes"]) {
+		//	ClusterNode node;
+		//	node.fromJson(element);
+		//	flattenedClusterNodes.push_back(node);
+		//}
 		
 		lodNums = loadedJson["lodNums"].get<uint32_t>();
 		meshes.resize(lodNums);

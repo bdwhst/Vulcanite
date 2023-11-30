@@ -431,6 +431,13 @@ void Mesh::calcBoundingSphereFromChildren(Cluster& cluster, Mesh& lastLOD)
 
 void Mesh::getBoundingSphere(Cluster& cluster)
 {
+    //std::cout << "Cluster: " << cluster.triangleIndices.size() << std::endl;
+    if (cluster.triangleIndices.size() == 0) {
+        //std::cout << "Empty cluster" << std::endl;
+        cluster.boundingSphereCenter = glm::vec3(0.0f);
+        cluster.boundingSphereRadius = 0.0f;
+        return;
+    }
     const auto& triangleIndices = cluster.triangleIndices;
     auto & px = *mesh.fv_begin(mesh.face_handle(triangleIndices[0]));
     MyMesh::VertexHandle py, pz;
@@ -539,6 +546,7 @@ json Mesh::toJson()
     json result = {
         {"clusterNum", clusterNum},
         {"triangleClusterIndex", triangleClusterIndex},
+        {"clusterGroupIndex", clusterGroupIndex},
         {"triangleIndicesSortedByClusterIdx", triangleIndicesSortedByClusterIdx},
         {"triangleVertexIndicesSortedByClusterIdx", triangleVertexIndicesSortedByClusterIdx}
     };
@@ -554,6 +562,7 @@ void Mesh::fromJson(const json& j)
 {
     clusterNum = j["clusterNum"].get<int>();
     triangleClusterIndex = j["triangleClusterIndex"].get<std::vector<int>>();
+    clusterGroupIndex = j["clusterGroupIndex"].get<std::vector<int>>();
     triangleIndicesSortedByClusterIdx = j["triangleIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
     triangleVertexIndicesSortedByClusterIdx = j["triangleVertexIndicesSortedByClusterIdx"].get<std::vector<uint32_t>>();
     
@@ -673,9 +682,9 @@ void Mesh::initVertexBuffer(){
             int clusterId = triangleClusterIndex[face.idx()];
             v.joint0 = glm::vec4(nodeColors[clusterColorAssignment[clusterId]], clusterId);
             
-            int clusterGroupId = clusterGroupIndex[clusterId];
+            //int clusterGroupId = clusterGroupIndex[clusterId];
             //// Skip coloring clusterGroupGraph for now, it requires extra work. Modulo seems fine for graph coloring
-            v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
+            //v.weight0 = glm::vec4(nodeColors[clusterGroupId % nodeColors.size()], clusterGroupId);
             //v.weight0 = glm::vec4(nodeColors[face.idx() % nodeColors.size()], clusterGroupId);
             vertexBuffer.push_back(v);
         }

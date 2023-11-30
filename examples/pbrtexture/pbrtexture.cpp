@@ -159,7 +159,7 @@ public:
 
 	VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
 	{
-		title = "Textured PBR with IBL";
+		title = "Vulkanite: A dynamic LOD rendering pipeline";
 
 		camera.type = Camera::CameraType::firstperson;
 		camera.movementSpeed = 4.0f;
@@ -2304,7 +2304,7 @@ public:
 			{
 				buildCommandBuffers();
 			}
-			if (overlay->sliderInt("Visualize Clutsers", &renderingPushConstants.vis_clusters,0,2)) {
+			if (overlay->sliderInt("Visualize Clusters", &renderingPushConstants.vis_clusters,0,2)) {
 				buildCommandBuffers();
 			}
 			if (overlay->sliderInt("LOD level", &vis_clusters_level, 0, naniteMesh.meshes.size() - 1))

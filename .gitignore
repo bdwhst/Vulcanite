@@ -238,3 +238,6 @@ data/roboto*.*
 
 
 build.bat
+
+# nanite caches
+**/*_naniteCache/**

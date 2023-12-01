@@ -114,19 +114,60 @@ void getScreenAABB(Cluster c, inout vec4 screenXY, inout float minZ)
     screenXY.zw = maxXY;
 }
 
-bool frustrumCulling(vec3 minPos, vec3 maxPos, mat4 currView, mat4 currProj)
+bool frustrumCulling(Cluster c, mat4 currView, mat4 currProj)
 {
     const float eps = 1e-3;
     bool inFrustrum = false;
     vec4 hpos;
-    hpos = currProj * currView * vec4(minPos,1.0);
+    vec4 p0 = vec4(c.pMin.x,c.pMin.y,c.pMin.z,1.0);
+    vec4 p1 = vec4(c.pMax.x,c.pMin.y,c.pMin.z,1.0);
+    vec4 p2 = vec4(c.pMin.x,c.pMax.y,c.pMin.z,1.0);
+    vec4 p3 = vec4(c.pMin.x,c.pMin.y,c.pMax.z,1.0);
+    vec4 p4 = vec4(c.pMax.x,c.pMax.y,c.pMin.z,1.0);
+    vec4 p5 = vec4(c.pMin.x,c.pMax.y,c.pMax.z,1.0);
+    vec4 p6 = vec4(c.pMax.x,c.pMin.y,c.pMax.z,1.0);
+    vec4 p7 = vec4(c.pMax.x,c.pMax.y,c.pMax.z,1.0);
+
+    hpos = currProj * currView * p0;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
-    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>-1.0-eps&&hpos.z<1.0+eps);
-    hpos = currProj * currView * vec4(maxPos,1.0);
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = currProj * currView * p1;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
-    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>-1.0-eps&&hpos.z<1.0+eps);
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = currProj * currView * p2;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+    
+    hpos = currProj * currView * p3;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = currProj * currView * p4;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = currProj * currView * p5;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = currProj * currView * p6;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = currProj * currView * p7;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+    
     return inFrustrum;
 }
 
@@ -139,7 +180,7 @@ void main()
 
     bool culled = false;
     Cluster currCluster = indata[index];
-    culled = culled || !frustrumCulling(currCluster.pMin, currCluster.pMax, ubomats.currView, ubomats.currProj);
+    culled = culled || !frustrumCulling(currCluster, ubomats.currView, ubomats.currProj);
     vec4 clipXY;
     float minZ;
     getScreenAABB(currCluster,clipXY,minZ);

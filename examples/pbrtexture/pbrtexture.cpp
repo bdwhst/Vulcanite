@@ -96,6 +96,8 @@ public:
 		glm::mat4 model;
 		glm::mat4 lastView;
 		glm::mat4 lastProj;
+		glm::mat4 currView;
+		glm::mat4 currProj;
 	}uboCullingMatrices;
 
 	struct UBOErrorMatrices {
@@ -359,18 +361,19 @@ public:
 			//naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
 
 
-			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
-			//models.cube.draw(drawCmdBuffers[i]);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
+			vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+			models.cube.draw(drawCmdBuffers[i]);
 
 
 			/*
 			*	TOP VIEW
 			*/
-			if(0)//Disabled
+			if(1)//Disabled
 			{
 				VkClearRect clearRect = {};
 				clearRect.rect.offset = { 0, 0 };
-				clearRect.rect.extent = { width / 5, width / 5 };
+				clearRect.rect.extent = { width / 5, height / 5 };
 				clearRect.baseArrayLayer = 0;
 				clearRect.layerCount = 1;
 
@@ -389,6 +392,7 @@ public:
 				{
 					vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
 					vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+					vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 					models.skybox.draw(drawCmdBuffers[i]);
 				}
 				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
@@ -399,6 +403,7 @@ public:
 				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
+				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 				models.cube.draw(drawCmdBuffers[i]);
 			}
 
@@ -463,8 +468,9 @@ public:
 				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			}
 
-			
-				/*imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			if(0)
+			{
+				imageMemBarrier = vks::initializers::imageMemoryBarrier();
 				imageMemBarrier.image = textures.hizbuffer.image;
 				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 				imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -476,8 +482,6 @@ public:
 				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 				imageMemBarrier.subresourceRange.layerCount = 1;
 				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
-
-
 
 				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
@@ -497,8 +501,8 @@ public:
 				imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
 				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 				imageMemBarrier.subresourceRange.layerCount = 1;
-				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);*/
-			
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			}
 
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
@@ -1871,6 +1875,8 @@ public:
 		uboCullingMatrices.model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		uboCullingMatrices.lastView = camera.matrices.view;
 		uboCullingMatrices.lastProj = camera.matrices.perspective;
+		uboCullingMatrices.currView = camera.matrices.view;
+		uboCullingMatrices.currProj = camera.matrices.perspective;
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -2177,6 +2183,11 @@ public:
 			//vkDeviceWaitIdle(device);
 		}
 
+		uboCullingMatrices.currView = camera.matrices.view;
+		uboCullingMatrices.currProj = camera.matrices.perspective;
+		memcpy(cullingUniformBuffer.mapped, &uboCullingMatrices, sizeof(uboCullingMatrices));
+		cullingUniformBuffer.flush();
+
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
 		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
@@ -2290,6 +2301,7 @@ public:
 
 	virtual void OnUpdateUIOverlay(vks::UIOverlay *overlay)
 	{
+		bool rebuildCB = false;
 		if (overlay->header("Settings")) {
 			if (overlay->inputFloat("Exposure", &uboParams.exposure, 0.1f, 2)) {
 				updateParams();
@@ -2298,19 +2310,23 @@ public:
 				updateParams();
 			}
 			if (overlay->checkBox("Skybox", &displaySkybox)) {
-				buildCommandBuffers();
+				rebuildCB = true;
 			}
 			if (overlay->sliderInt("Threshold", &thresholdInt, 0, 1000))
 			{
-				buildCommandBuffers();
+				rebuildCB = true;
 			}
 			if (overlay->sliderInt("Visualize Clusters", &renderingPushConstants.vis_clusters,0,2)) {
-				buildCommandBuffers();
+				rebuildCB = true;
 			}
 			if (overlay->sliderInt("LOD level", &vis_clusters_level, 0, naniteMesh.meshes.size() - 1))
 			{
-				buildCommandBuffers();
+				rebuildCB = true;
 			}
+		}
+		if (rebuildCB)
+		{
+			buildCommandBuffers();
 		}
 	}
 };

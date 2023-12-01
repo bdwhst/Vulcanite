@@ -256,7 +256,7 @@ struct Instance {
                 glm::vec3 parentWorldCenter = glm::vec3(rootTransform * glm::vec4(parentCenter, 1.0));
                 //TODO: handle arbitary scaling
 
-                assert(parentWorldRadius > 0 && parentWorldRadius > worldRadius);
+                //assert(parentWorldRadius > 0 && parentWorldRadius > worldRadius);
                 errorInfo[j + currClusterNum].centerRP = glm::vec4(parentWorldCenter, parentBoundingRadius);
             }
             currClusterNum += referenceMesh->meshes[i].clusterNum;

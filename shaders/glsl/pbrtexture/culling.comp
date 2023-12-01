@@ -37,6 +37,8 @@ layout(set = 0, binding = 4) uniform UBOMats {
     mat4 model; //unused
     mat4 lastView;
     mat4 lastProj;
+    mat4 currView;
+    mat4 currProj;
 } ubomats;
 
 layout(set = 0, binding = 5) uniform sampler2D lastHZB;
@@ -81,14 +83,14 @@ void getScreenAABB(Cluster c, inout vec4 screenXY, inout float minZ)
     p6h.xyz /= p6h.w;
     p7h.xyz /= p7h.w;
 
-    p0h = p0h*0.5+0.5;
-    p1h = p1h*0.5+0.5;
-    p2h = p2h*0.5+0.5;
-    p3h = p3h*0.5+0.5;
-    p4h = p4h*0.5+0.5;
-    p5h = p5h*0.5+0.5;
-    p6h = p6h*0.5+0.5;
-    p7h = p7h*0.5+0.5;
+    p0h.xy = p0h.xy*0.5+0.5;
+    p1h.xy = p1h.xy*0.5+0.5;
+    p2h.xy = p2h.xy*0.5+0.5;
+    p3h.xy = p3h.xy*0.5+0.5;
+    p4h.xy = p4h.xy*0.5+0.5;
+    p5h.xy = p5h.xy*0.5+0.5;
+    p6h.xy = p6h.xy*0.5+0.5;
+    p7h.xy = p7h.xy*0.5+0.5;
 
     minZ = 1.0;
     minZ = min(minZ, min(p0h.z,p1h.z));
@@ -112,12 +114,20 @@ void getScreenAABB(Cluster c, inout vec4 screenXY, inout float minZ)
     screenXY.zw = maxXY;
 }
 
-bool frustrumCulling(vec3 pos, mat4 currView, mat4 currProj)
+bool frustrumCulling(vec3 minPos, vec3 maxPos, mat4 currView, mat4 currProj)
 {
-    vec4 hpos = currProj * currView * vec4(pos,1.0);
+    const float eps = 1e-3;
+    bool inFrustrum = false;
+    vec4 hpos;
+    hpos = currProj * currView * vec4(minPos,1.0);
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
-    return hpos.x>-1.1&&hpos.x<1.1&&hpos.y>-1.1&&hpos.y<1.1&&hpos.z>-1.1&&hpos.z<1.1;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>-1.0-eps&&hpos.z<1.0+eps);
+    hpos = currProj * currView * vec4(maxPos,1.0);
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>-1.0-eps&&hpos.z<1.0+eps);
+    return inFrustrum;
 }
 
 
@@ -128,29 +138,31 @@ void main()
     if(index >= pcs.numClusters) return;
 
     bool culled = false;
-    // Cluster currCluster = indata[index];
-    // vec4 clipXY;
-    // float minZ;
-    // getScreenAABB(currCluster,clipXY,minZ);
-    // vec4 screenSize = textureSize(lastHZB, 0).xyxy;
-    // vec4 screenXY = clipXY * screenSize;
-    // vec2 screenSpan = screenXY.zw-screenXY.xy;
-    // float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
-    // float hzbLevel_1 = max(hzbLevel-1,0);
-    // float texScale = exp2(-hzbLevel_1);
-    // vec2 texSpan = ceil(screenXY.zw*texScale) - floor(screenXY.xy*texScale);
-    // if(texSpan.x<2&&texSpan.y<2) hzbLevel = hzbLevel_1;
-    // float z1 = textureLod(lastHZB,vec2(clipXY.x,clipXY.y),hzbLevel).x;
-    // float z2 = textureLod(lastHZB,vec2(clipXY.x,clipXY.w),hzbLevel).x;
-    // float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y),hzbLevel).x;
-    // float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
-    // float maxHiz = max(max(z1,z2),max(z3,z4));
-    // if(minZ>maxHiz+0.02) culled = true;
+    Cluster currCluster = indata[index];
+    culled = culled || !frustrumCulling(currCluster.pMin, currCluster.pMax, ubomats.currView, ubomats.currProj);
+    vec4 clipXY;
+    float minZ;
+    getScreenAABB(currCluster,clipXY,minZ);
+    vec4 screenSize = textureSize(lastHZB, 0).xyxy;
+    vec4 screenXY = clipXY * screenSize;
+    vec2 screenSpan = screenXY.zw-screenXY.xy;
+    float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
+    float hzbLevel_1 = max(hzbLevel-1,0);
+    float texScale = exp2(-hzbLevel_1);
+    vec2 texSpan = ceil(screenXY.zw*texScale) - floor(screenXY.xy*texScale);
+    if(texSpan.x<2&&texSpan.y<2) hzbLevel = hzbLevel_1;
+    float z1 = textureLod(lastHZB,vec2(clipXY.x,clipXY.y),hzbLevel).x;
+    float z2 = textureLod(lastHZB,vec2(clipXY.x,clipXY.w),hzbLevel).x;
+    float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y),hzbLevel).x;
+    float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
+    float maxHiz = max(max(z1,z2),max(z3,z4));
+    if(minZ>maxHiz) culled = true;
 
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
+        //TODO: reduce atomicity with shared memory
         uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);
         for(uint i = 0; i < totalVertices / 3; i++)
         {

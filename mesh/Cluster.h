@@ -5,6 +5,8 @@
 
 using json = nlohmann::json;
 
+#include "utils.h"
+
 struct Cluster{
     uint32_t clusterGroupIndex;
     std::vector<uint32_t> triangleIndices;
@@ -25,7 +27,8 @@ struct Cluster{
 
     json toJson() const {
         return {
-            {"parentError", parentNormalizedError},
+            {"normalizedlodError", normalizedlodError},
+            {"parentNormalizedError", parentNormalizedError},
             {"lodError", lodError},
             {"boundingSphereCenter", {boundingSphereCenter.x, boundingSphereCenter.y, boundingSphereCenter.z}},
             {"boundingSphereRadius", boundingSphereRadius},
@@ -34,29 +37,30 @@ struct Cluster{
     }
 
     void fromJson(const json& j) {
-        if (j.find("parentError") != j.end()) {
-            parentNormalizedError = j["parentError"].get<double>();
-        }
+        ASSERT(j.find("normalizedlodError") != j.end(), "normalizedlodError not found");
+        normalizedlodError = j["normalizedlodError"].get<double>();
 
-        if (j.find("lodError") != j.end()) {
-            lodError = j["lodError"].get<double>();
-        }
+        ASSERT(j.find("parentNormalizedError") != j.end(), "parentNormalizedError not found");
+        parentNormalizedError = j["parentNormalizedError"].get<double>();
 
+        ASSERT(j.find("lodError") != j.end(), "lodError not found");
+        lodError = j["lodError"].get<double>();
+
+        ASSERT(j.find("boundingSphereCenter") != j.end() && j["boundingSphereCenter"].is_array() && j["boundingSphereCenter"].size() == 3, 
+            "boundingSphereCenter not found or not properly set");
         if (j.find("boundingSphereCenter") != j.end() && j["boundingSphereCenter"].is_array() && j["boundingSphereCenter"].size() == 3) {
             boundingSphereCenter.x = j["boundingSphereCenter"][0].get<float>();
             boundingSphereCenter.y = j["boundingSphereCenter"][1].get<float>();
             boundingSphereCenter.z = j["boundingSphereCenter"][2].get<float>();
         }
 
+        ASSERT(j.find("boundingSphereRadius") != j.end(), "boundingSphereRadius not found");
         //if (j.contains("boundingSphereRadius")) {
-        if (j.find("boundingSphereRadius") != j.end()) {
-            boundingSphereRadius = j["boundingSphereRadius"].get<double>();
-        }
+        boundingSphereRadius = j["boundingSphereRadius"].get<double>();
 
-        if (j.find("parentClusterIndices") != j.end() && j["parentClusterIndices"].is_array()) {
-            for (auto& idx : j["parentClusterIndices"]) {
-				parentClusterIndices.emplace_back(idx.get<uint32_t>());
-			}
+        ASSERT(j.find("parentClusterIndices") != j.end() && j["parentClusterIndices"].is_array(), "parentClusterIndices not found");
+        for (auto& idx : j["parentClusterIndices"]) {
+			parentClusterIndices.emplace_back(idx.get<uint32_t>());
 		}
     }
 };

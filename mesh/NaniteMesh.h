@@ -58,6 +58,9 @@ struct NaniteMesh {
 
 	const char* filepath = nullptr;
 	const char* cache_time_key = "cache_time";
+
+	std::vector<Mesh> debugMeshes;
+	void checkDeserializationResult(const std::string& filepath);
 };
 
 void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes);

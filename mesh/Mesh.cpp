@@ -119,7 +119,7 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
         }
         cluster.childLODErrorMax = std::max(cluster.childLODErrorMax, .0);
         ASSERT(cluster.childLODErrorMax >= 0, "cluster.childMaxLODError < 0");
-        ASSERT(cluster.qemError > 0, "cluster.qemError <= 0");
+        ASSERT(cluster.qemError >= 0, "cluster.qemError < 0");
         cluster.lodError = cluster.qemError + cluster.childLODErrorMax;
         cluster.normalizedlodError = std::max(maxChildNormalizedError + 1e-9, cluster.lodError / (cluster.boundingSphereRadius * cluster.boundingSphereRadius));
         for (int idx : cluster.childClusterIndices)

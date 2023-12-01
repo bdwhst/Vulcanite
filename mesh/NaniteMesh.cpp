@@ -85,7 +85,7 @@ void NaniteMesh::generateNaniteInfo() {
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
 	int clusterGroupNum = -1;
-	int target = 3;
+	int target = 6;
 	int currFaceNum = -1;
 	/*if (!OpenMesh::IO::read_mesh(mymesh, "D:\\AndrewChen\\CIS565\\Vulcanite\\assets\\models\\bunny.obj")) {
 		ASSERT(0, "failed to load mesh");
@@ -177,16 +177,12 @@ void NaniteMesh::serialize(const std::string& filepath)
 		auto& mesh = meshes[i];
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
 		// Export the mesh to the specified file
-		if (!OpenMesh::IO::write_mesh(mesh.mesh, output_filename)) {
+		if (!OpenMesh::IO::write_mesh(mesh.mesh, output_filename, OpenMesh::IO::Options::VertexNormal)) {
 			std::cerr << "Error exporting mesh to " << output_filename << std::endl;
 		}
 	}
 
 	json result;
-	//for (size_t i = 0; i < flattenedClusterNodes.size(); i++)
-	//{
-	//	result["flattenedClusterNodes"][i] = flattenedClusterNodes[i].toJson();
-	//}
 	for (size_t i = 0; i < meshes.size(); i++)
 	{
 		result["mesh"][i] = meshes[i].toJson();
@@ -208,35 +204,41 @@ void NaniteMesh::serialize(const std::string& filepath)
 void NaniteMesh::deserialize(const std::string & filepath)
 {
 	std::ifstream inputFile(std::string(filepath) + "nanite_info.json");
-	if (inputFile.is_open()) {
-		json loadedJson;
-		inputFile >> loadedJson;
 
-		//for (const auto& element : loadedJson["flattenedClusterNodes"]) {
-		//	ClusterNode node;
-		//	node.fromJson(element);
-		//	flattenedClusterNodes.push_back(node);
-		//}
+	ASSERT(inputFile.is_open(), "Error opening file for deserialization");
+	json loadedJson;
+	inputFile >> loadedJson;
 		
-		lodNums = loadedJson["lodNums"].get<uint32_t>();
-		meshes.resize(lodNums);
-		for (int i = 0; i < meshes.size(); ++i) {
-			auto& meshLOD = meshes[i];
-			meshLOD.fromJson(loadedJson["mesh"][i]);
-		}
+	lodNums = loadedJson["lodNums"].get<uint32_t>();
+	meshes.resize(lodNums);
+	for (int i = 0; i < lodNums; ++i) {
+		auto& meshLOD = meshes[i];
+		meshLOD.fromJson(loadedJson["mesh"][i]);
+
+		float percentage = static_cast<float>(i+1) / lodNums * 100.0;
+		std::cout << "\r";
+		std::cout << "[Loading] Mesh Info: " << std::fixed << std::setw(6) << std::setprecision(2) << percentage << "%";
+		std::cout.flush();
 	}
-	else {
-		ASSERT(0, "Error opening file for deserialization");
-	}
+	std::cout << std::endl;
+
 	for (size_t i = 0; i < lodNums; i++)
 	{
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
-		if (!OpenMesh::IO::read_mesh(meshes[i].mesh, output_filename)) {
+		meshes[i].mesh.request_vertex_normals();
+		OpenMesh::IO::Options opt = OpenMesh::IO::Options::VertexNormal;
+		if (!OpenMesh::IO::read_mesh(meshes[i].mesh, output_filename, opt)) {
 			ASSERT(0, "failed to load mesh");
-			ASSERT(meshes[i].mesh.has_vertex_normals(), "mesh has no normals");
 		}
+		ASSERT(meshes[i].mesh.has_vertex_normals(), "mesh has no normals");
 		meshes[i].lodLevel = i;
+
+		std::cout << "\r";
+		float percentage = static_cast<float>(i+1) / lodNums * 100.0;
+		std::cout << "[Loading] Mesh LOD: " << std::fixed << std::setw(6) << std::setprecision(2) << percentage << "%";
+		std::cout.flush();
 	}
+	std::cout << std::endl;
 }
 
 void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
@@ -244,7 +246,7 @@ void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
 	bool hasInitialized = false;
 	std::string cachePath;
 	if (filepath.find_last_of(".") != std::string::npos) {
-		cachePath = filepath.substr(0, filepath.find_last_of('.')) + "\\";
+		cachePath = filepath.substr(0, filepath.find_last_of('.')) + "_naniteCache\\";
 	}
 	else {
 		ASSERT(0, "Invalid file path, no ext");
@@ -252,19 +254,77 @@ void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
 
 	if (useCache) {
 		std::ifstream inputFile(cachePath + "nanite_info.json");
+		// TODO: Check cache time to see if cache needs to be rebuilt
 		if (inputFile.is_open()) {
-			deserialize(cachePath.c_str());
+			deserialize(cachePath);
 			hasInitialized = true;
 		}
 		else {
-			ASSERT(0, "No cache, need to initialize");
+			std::cerr << "No cache, need to initialize from now" << std::endl;
 		}
 	}	
 
 	if (!hasInitialized) {
 		generateNaniteInfo();
-		serialize(cachePath.c_str());
+		serialize(cachePath);
 		std::cout << cachePath << "nanite_info.json" << " generated" << std::endl;
+		//checkDeserializationResult(cachePath);
+	}
+}
+
+void NaniteMesh::checkDeserializationResult(const std::string& filepath)
+{
+	std::ifstream inputFile(std::string(filepath) + "nanite_info.json");
+
+	ASSERT(inputFile.is_open(), "Error opening file for deserialization");
+	json loadedJson;
+	inputFile >> loadedJson;
+
+	lodNums = loadedJson["lodNums"].get<uint32_t>();
+	debugMeshes.resize(lodNums);
+	for (int i = 0; i < lodNums; ++i) {
+		auto& meshLOD = debugMeshes[i];
+		meshLOD.fromJson(loadedJson["mesh"][i]);
+	}
+
+	for (size_t i = 0; i < lodNums; i++)
+	{
+		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
+		debugMeshes[i].mesh.request_vertex_normals();
+		OpenMesh::IO::Options opt = OpenMesh::IO::Options::VertexNormal;
+		if (!OpenMesh::IO::read_mesh(debugMeshes[i].mesh, output_filename, opt)) {
+			ASSERT(0, "failed to load mesh");
+		}
+		ASSERT(debugMeshes[i].mesh.has_vertex_normals(), "mesh has no normals");
+		debugMeshes[i].lodLevel = i;
+	}
+
+	for (size_t i = 0; i < lodNums; i++)
+	{
+		auto& mesh = meshes[i];
+		auto& debugMesh = debugMeshes[i];
+		TEST(mesh.clusters.size() == debugMesh.clusters.size(), "cluster size match");
+		for (size_t clusterIdx = 0; clusterIdx < mesh.clusters.size(); clusterIdx++)
+		{
+			const auto& cluster = mesh.clusters[clusterIdx];
+			const auto& debugCluster = debugMesh.clusters[clusterIdx];
+			TEST(cluster.parentNormalizedError == debugCluster.parentNormalizedError, "parentNormalizedError match");
+			TEST(cluster.lodError == debugCluster.lodError, "lodError match");
+			TEST(cluster.boundingSphereCenter == debugCluster.boundingSphereCenter, "boundingSphereCenter match");
+			TEST(cluster.boundingSphereRadius == debugCluster.boundingSphereRadius, "boundingSphereRadius match");
+		}
+		TEST(mesh.mesh.n_faces() == debugMesh.mesh.n_faces(), "face size match");
+		TEST(mesh.mesh.n_vertices() == debugMesh.mesh.n_vertices(), "vertex size match");
+		for (const auto & vhandle: mesh.mesh.vertices())
+		{
+			auto& debugVhandle = debugMesh.mesh.vertex_handle(vhandle.idx());
+			//std::cout << "mesh normal: " << mesh.mesh.normal(vhandle)[0] << " " << mesh.mesh.normal(vhandle)[1] << " " << mesh.mesh.normal(vhandle)[2] << std::endl;
+			//std::cout << "debug normal: " << debugMesh.mesh.normal(debugVhandle)[0] << " " << debugMesh.mesh.normal(debugVhandle)[1] << " " << debugMesh.mesh.normal(debugVhandle)[2] << std::endl;
+			TEST((mesh.mesh.point(vhandle) - debugMesh.mesh.point(debugVhandle)).length() < 1e-5f, "vertex position match");
+			TEST((mesh.mesh.normal(vhandle) - debugMesh.mesh.normal(debugVhandle)).length() < 1e-5f, "vertex normal match");
+			//ASSERT((mesh.mesh.texcoord2D(vhandle) - debugMesh.mesh.texcoord2D(debugVhandle)).length() < 1e-5f, "vertex texcoord not match");
+		}
+
 	}
 }
 

@@ -418,15 +418,15 @@ void Mesh::calcBoundingSphereFromChildren(Cluster& cluster, Mesh& lastLOD)
         max_radius = std::max(max_radius, childCluster.boundingSphereRadius);
     }
     center /= cluster.childClusterIndices.size();
-    float max_dist = 0;
+    /*float max_dist = 0;
     for (auto& i : cluster.childClusterIndices)
     {
         auto& childCluster = lastLOD.clusters[i];
         max_dist = std::max(max_dist, glm::distance(center, childCluster.boundingSphereCenter));
     }
-    max_dist += max_radius;
+    max_dist += max_radius;*/
     cluster.boundingSphereCenter = center;
-    cluster.boundingSphereRadius = max_dist;
+    cluster.boundingSphereRadius = max_radius;
 }
 
 void Mesh::getBoundingSphere(Cluster& cluster)

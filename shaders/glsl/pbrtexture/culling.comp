@@ -55,6 +55,7 @@ layout(std430, set = 0, binding = 7) buffer writeonly ObjectIdOut{
 layout(push_constant) uniform PushConstants {
     int numClusters;
     float threshold;
+    int useFrustrumOcclusion;
 } pcs;
 
 // Naive AABB compute
@@ -119,7 +120,7 @@ void getScreenAABB(Cluster c, inout vec4 screenXY, inout float minZ)
     screenXY.zw = maxXY;
 }
 
-bool frustrumCulling(Cluster c, mat4 currView, mat4 currProj)
+bool frustrumCulling(Cluster c)
 {
     const float eps = 1e-3;
     bool inFrustrum = false;
@@ -133,62 +134,54 @@ bool frustrumCulling(Cluster c, mat4 currView, mat4 currProj)
     vec4 p6 = vec4(c.pMax.x,c.pMin.y,c.pMax.z,1.0);
     vec4 p7 = vec4(c.pMax.x,c.pMax.y,c.pMax.z,1.0);
 
-    hpos = currProj * currView * p0;
+    hpos = ubomats.currProj * ubomats.currView * p0;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
 
-    hpos = currProj * currView * p1;
+    hpos = ubomats.currProj * ubomats.currView * p1;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
 
-    hpos = currProj * currView * p2;
+    hpos = ubomats.currProj * ubomats.currView * p2;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
     
-    hpos = currProj * currView * p3;
+    hpos = ubomats.currProj * ubomats.currView * p3;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
 
-    hpos = currProj * currView * p4;
+    hpos = ubomats.currProj * ubomats.currView * p4;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
 
-    hpos = currProj * currView * p5;
+    hpos = ubomats.currProj * ubomats.currView * p5;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
 
-    hpos = currProj * currView * p6;
+    hpos = ubomats.currProj * ubomats.currView * p6;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
 
-    hpos = currProj * currView * p7;
+    hpos = ubomats.currProj * ubomats.currView * p7;
     if(hpos.w==0.0) return false;
     hpos.xyz /= hpos.w;
     inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
     
-    return inFrustrum;
+    return !inFrustrum;
 }
 
-
-void main()
+bool occlusionCulling(Cluster c)
 {
-    uint index = gl_GlobalInvocationID.x;
-    
-    if(index >= pcs.numClusters) return;
-
-    bool culled = false;
-    Cluster currCluster = indata[index];
-    culled = culled || !frustrumCulling(currCluster, ubomats.currView, ubomats.currProj);
     vec4 clipXY;
     float minZ;
-    getScreenAABB(currCluster,clipXY,minZ);
+    getScreenAABB(c,clipXY,minZ);
     vec4 screenSize = textureSize(lastHZB, 0).xyxy;
     vec4 screenXY = clipXY * screenSize;
     vec2 screenSpan = screenXY.zw-screenXY.xy;
@@ -202,8 +195,23 @@ void main()
     float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y),hzbLevel).x;
     float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
     float maxHiz = max(max(z1,z2),max(z3,z4));
-    if(minZ>maxHiz) culled = true;
+    return minZ>maxHiz;
+}
 
+
+void main()
+{
+    uint index = gl_GlobalInvocationID.x;
+    
+    if(index >= pcs.numClusters) return;
+
+    bool culled = false;
+    Cluster currCluster = indata[index];
+    if(pcs.useFrustrumOcclusion==1)
+    {
+        culled = culled || frustrumCulling(currCluster);
+        culled = culled || occlusionCulling(currCluster);
+    }
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;

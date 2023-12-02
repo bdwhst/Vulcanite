@@ -57,8 +57,6 @@ public:
 	VkPipelineLayout errorProjPipelineLayout;
 	VkPipeline errorProjPipeline;
 
-	
-
 	VkSampler depthStencilSampler;
 
 	uint32_t workgroupX = 8, workgroupY = 8;
@@ -141,6 +139,7 @@ public:
 	struct {
 		VkPipeline skybox;
 		VkPipeline pbr;
+		VkPipeline topView;
 	} pipelines;
 
 	int thresholdInt = 500;
@@ -149,6 +148,7 @@ public:
 	struct CullingPushConstants {
 		int numClusters;
 		float threshold;
+		bool useFrustrumOcclusionCulling = true;
 	} cullingPushConstants;
 
 	struct RenderingPushConstants {
@@ -173,7 +173,12 @@ public:
 
 	VkPipelineLayout pipelineLayout;
 
+	VkRenderPass topViewRenderPass;
+
 	int vis_clusters_level = 0;
+	int topViewWidth = width / 5, topViewHeight = height / 5;
+
+	bool vis_topView = false;
 
 	VulkanExample() : VulkanExampleBase(ENABLE_VALIDATION)
 	{
@@ -394,58 +399,12 @@ public:
 			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
 			//vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 			//models.cube.draw(drawCmdBuffers[i]);
-
-
-			/*
-			*	TOP VIEW
-			*/
-			if(0)//Disabled
-			{
-				VkClearRect clearRect = {};
-				clearRect.rect.offset = { 0, 0 };
-				clearRect.rect.extent = { width / 5, height / 5 };
-				clearRect.baseArrayLayer = 0;
-				clearRect.layerCount = 1;
-
-				VkClearAttachment clearAttachment = {};
-				clearAttachment.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_DEPTH_BIT;
-				clearAttachment.clearValue.depthStencil = { 1.0f, 0 };
-
-				vkCmdClearAttachments(drawCmdBuffers[i], 1, &clearAttachment, 1, &clearRect);
-
-				VkViewport viewport1 = vks::initializers::viewport((float)width / 5.0f, (float)height / 5.0f, 0.0f, 1.0f);
-				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
-
-				VkRect2D scissor1 = vks::initializers::rect2D((float)width / 5.0f, (float)height / 5.0f, 0.0f, 0.0f);
-				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
-				if (displaySkybox)
-				{
-					vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
-					vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
-					vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-					models.skybox.draw(drawCmdBuffers[i]);
-				}
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
-				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
-				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
-
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
-				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-				models.cube.draw(drawCmdBuffers[i]);
-			}
-
-
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
-
 			/*
-			*  HZB build
+			*	Depth copy
 			*/
-
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -476,8 +435,52 @@ public:
 			imageMemBarriers[0].subresourceRange.levelCount = 1;
 			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
-
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+
+
+			/*
+			*	TOP VIEW
+			*/
+
+			if(vis_topView)
+			{
+				renderPassBeginInfo.renderPass = topViewRenderPass;
+				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+				VkViewport viewport1 = vks::initializers::viewport(topViewWidth, topViewHeight, 0.0f, 1.0f);
+				viewport1.x = width - topViewWidth;
+				viewport1.y = height - topViewHeight;
+				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
+
+				VkRect2D scissor1 = vks::initializers::rect2D(topViewWidth, topViewHeight, viewport1.x, viewport1.y);
+				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
+				if (displaySkybox)
+				{
+					vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
+					vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+					vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+					models.skybox.draw(drawCmdBuffers[i]);
+				}
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
+				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
+				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
+				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
+				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+				models.cube.draw(drawCmdBuffers[i]);
+				vkCmdEndRenderPass(drawCmdBuffers[i]);
+			}
+
+
+			
+
+
+			/*
+			*  HZB build
+			*/
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
 			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
@@ -498,6 +501,10 @@ public:
 				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			}
 
+			/*
+			*  HZB view
+			*/
+
 			if(0)
 			{
 				imageMemBarrier = vks::initializers::imageMemoryBarrier();
@@ -513,6 +520,7 @@ public:
 				imageMemBarrier.subresourceRange.layerCount = 1;
 				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
+				renderPassBeginInfo.renderPass = renderPass;
 				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
@@ -857,6 +865,13 @@ public:
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbr));
 		
 		pipelineCI.stageCount = 2;
+
+		{
+			// Top view pipeline
+			rasterizationState.cullMode = VK_CULL_MODE_NONE;
+			pipelineCI.renderPass = topViewRenderPass;
+			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.topView));
+		}
 
 		{
 			// Debug Draw Quad pipeline
@@ -2322,6 +2337,80 @@ public:
 		cullingUniformBuffer.flush();
 	}
 
+	void setupRenderPass()
+	{
+		VulkanExampleBase::setupRenderPass();
+
+		std::array<VkAttachmentDescription, 2> attachments = {};
+		// Color attachment
+		attachments[0].format = swapChain.colorFormat;
+		attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[0].initialLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		// Depth attachment
+		attachments[1].format = depthFormat;
+		attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference colorReference = {};
+		colorReference.attachment = 0;
+		colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		VkAttachmentReference depthReference = {};
+		depthReference.attachment = 1;
+		depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		VkSubpassDescription subpassDescription = {};
+		subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpassDescription.colorAttachmentCount = 1;
+		subpassDescription.pColorAttachments = &colorReference;
+		subpassDescription.pDepthStencilAttachment = &depthReference;
+		subpassDescription.inputAttachmentCount = 0;
+		subpassDescription.pInputAttachments = nullptr;
+		subpassDescription.preserveAttachmentCount = 0;
+		subpassDescription.pPreserveAttachments = nullptr;
+		subpassDescription.pResolveAttachments = nullptr;
+
+		// Subpass dependencies for layout transitions
+		std::array<VkSubpassDependency, 2> dependencies;
+
+		dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[0].dstSubpass = 0;
+		dependencies[0].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+		dependencies[0].dependencyFlags = 0;
+
+		dependencies[1].srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[1].dstSubpass = 0;
+		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[1].srcAccessMask = 0;
+		dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+		dependencies[1].dependencyFlags = 0;
+
+		VkRenderPassCreateInfo renderPassInfo = {};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		renderPassInfo.pAttachments = attachments.data();
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpassDescription;
+		renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+		renderPassInfo.pDependencies = dependencies.data();
+
+		VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &topViewRenderPass));
+	}
+
 	void setupDepthStencil()
 	{
 		VkImageCreateInfo imageCI{};
@@ -2434,6 +2523,12 @@ public:
 				updateParams();
 			}
 			if (overlay->checkBox("Skybox", &displaySkybox)) {
+				rebuildCB = true;
+			}
+			if (overlay->checkBox("Top View", &vis_topView)) {
+				rebuildCB = true;
+			}
+			if (overlay->checkBox("Frustrum&Occlusion Culling", &cullingPushConstants.useFrustrumOcclusionCulling)) {
 				rebuildCB = true;
 			}
 			if (overlay->sliderInt("Threshold", &thresholdInt, 0, 1000))

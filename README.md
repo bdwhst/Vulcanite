@@ -198,3 +198,45 @@ Steps
 
 Basic Dynamic LOD
 
+12.1
+
+Multi-instance
+- We can use drawIndirect struct to easily implement multi-instance
+- However, we need to consider how we should 
+- Cluster/culling
+- Top view
+
+每个ClusterInfo以及ErrorInfo都需要存多份，同时多份里面分别存一个objectid，但是在Culling时不需要读取这个objectId，
+需要搞清楚怎么在compute shader之后创建一个新的buffer作为输出，同时输入到另一个stage里
+因为objectId目前只用于获取当前对应的modelMatrix，而ClusterInfo和ErrorInfo都是经过变换的，所以只需要在最后culling输出的时候需要存入这个objectId。
+在culling之前，输入一个ObjectId数组，经过culling之后，输出一个新的ObjectId数组，这个数组和后面的三角形一一对应，同时对应着modelMatrices
+
+
+在culling中，如果我输入了两份的clusterInfo，就会产出一个带有offset的culled indices，同时就算这个indices带有objectId，也很难区分，除非再加一个instance层
+
+每个pipeline
+	对于compute pipeline来说
+		含有一个pipeline layout，这个pipeline layout含有一个descriptor layout，以及push constant相关的信息。
+		一个stage，对应着当前pipeline属于哪个阶段
+
+对于每个着色器
+	可能有多个descriptor sets（如果我们需要对不同的物体进行同样流程的绘制，就需要不同的descriptor sets），每个set里面有多个bindings。
+	只有一个set layout（可能需要多个？如果当前着色器在一次绘制中用了多个descriptor sets的话）用来告诉当前shader各个
+
+
+
+如何解决vs无法访问primitveID的问题？
+	1. gs
+	2. 额外创建一个compute shader，这个shader需要做到：
+		生成一个per-vertex的attribute，这个attribute代表当前的primitveId，然而做不到，因为如果有多个实例的情况下，可能会有一个attribute
+		index buffer			: 0 1 2 | 0 1 2 | 5 6 7
+		object index buffer		: 0 0 0 | 1 1 1 | 0 0 0
+		primtive index buffer 	: 0/1 | 0/1 | 0/1 
+		不能在vertex shader里解决这个问题！
+		需要后置
+
+		正确的做法应该是：直接将culledIndices和objectIndices合在一起通过computeShader生成一个visibilityBuffer
+		如何创建？
+
+1. culled == false 之后会出现闪烁的问题
+2. 

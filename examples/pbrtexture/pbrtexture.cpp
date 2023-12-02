@@ -568,15 +568,15 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -4; i <= 4; i++)
+		for (int i = -7; i <= 7; i++)
 		{
-			for (int j = -4; j <= 4; j++) 
+			for (int j = -7; j <= 7; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
 				auto& instance = Instance(&naniteMesh, modelMat);
 				modelMats.push_back(modelMat);
 				scene.naniteObjects.push_back(instance);
-
+		
 			}
 		}
 
@@ -1926,7 +1926,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount * sizeof(uint32_t),
+			scene.sceneIndicesCount / 2 * sizeof(uint32_t),
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));
@@ -1934,7 +1934,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount * sizeof(uint32_t),
+			scene.sceneIndicesCount / 2 * sizeof(uint16_t),
 			&culledObjectIndicesBuffer.buffer,
 			&culledObjectIndicesBuffer.memory,
 			nullptr));

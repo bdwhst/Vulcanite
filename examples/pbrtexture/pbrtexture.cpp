@@ -15,6 +15,7 @@
 #include "MeshHandler.h"
 #include "NaniteMesh.h"
 #include "Instance.h"
+#include "NaniteScene.h"
 #include "VulkanDescriptorSetManager.h"
 
 #define ENABLE_VALIDATION true
@@ -71,6 +72,7 @@ public:
 	MeshHandler reducedModel;
 	NaniteMesh naniteMesh;
 	Instance instance1;
+	NaniteScene scene;
 
 	std::vector<ClusterInfo> clusterinfos;
 	std::vector<ErrorInfo> errorinfos;
@@ -83,6 +85,7 @@ public:
 		vks::Buffer topSkybox;
 		vks::Buffer topCube;
 		vks::Buffer params;
+		vks::Buffer modelMats;
 	} uniformBuffers;
 
 	struct UBOMatrices {
@@ -91,6 +94,10 @@ public:
 		glm::mat4 view;
 		glm::vec3 camPos;
 	} uboMatrices1, uboMatrices2, uboMatrices3, uboMatrices4;
+
+	struct ModelMatrices {
+		glm::mat4 model;
+	};
 
 	struct UBOCullingMatrices {
 		glm::mat4 model;
@@ -109,6 +116,11 @@ public:
 
 	glm::mat4 model0 = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 3)), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 	glm::mat4 model1 = glm::scale(glm::mat4(1.0f), glm::vec3(0.2f, 0.2f, 0.03f));
+	std::vector<glm::mat4> modelMats = {
+		glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 3)), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+		glm::mat4(1.0f),
+		glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f)),
+	};
 
 	struct DrawIndexedIndirect {
 		uint32_t indexCount;
@@ -142,6 +154,8 @@ public:
 	} renderingPushConstants;
 
 	vks::Buffer culledIndicesBuffer;
+	vks::Buffer culledObjectIndicesBuffer;
+	vks::Buffer modelMatsBuffer;
 	vks::Buffer clustersInfoBuffer;
 	vks::Buffer cullingUniformBuffer;
 	vks::Buffer drawIndexedIndirectBuffer;
@@ -186,6 +200,7 @@ public:
 		uniformBuffers.params.destroy();
 		uniformBuffers.topCube.destroy();
 		uniformBuffers.topSkybox.destroy();
+		modelMatsBuffer.destroy();
 
 		textures.environmentCube.destroy();
 		textures.irradianceCube.destroy();
@@ -205,6 +220,9 @@ public:
 		}
 		if (deviceFeatures.fillModeNonSolid) {
 			enabledFeatures.fillModeNonSolid = VK_TRUE;
+		}
+		if (deviceFeatures.geometryShader) {
+			enabledFeatures.geometryShader = VK_TRUE;
 		}
 	}
 
@@ -317,6 +335,15 @@ public:
 			bufferBarrier.size = VK_WHOLE_SIZE;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = culledObjectIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			
 			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 			VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
@@ -339,6 +366,7 @@ public:
 
 			// Objects
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 0), 0, NULL);
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 10), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 			//models.object.draw(drawCmdBuffers[i]);
 
@@ -361,15 +389,15 @@ public:
 			//naniteMesh.meshes[0].draw(drawCmdBuffers[i], 0, nullptr, 1);
 
 
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
-			vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-			models.cube.draw(drawCmdBuffers[i]);
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
+			//vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+			//models.cube.draw(drawCmdBuffers[i]);
 
 
 			/*
 			*	TOP VIEW
 			*/
-			if(1)//Disabled
+			if(0)//Disabled
 			{
 				VkClearRect clearRect = {};
 				clearRect.rect.offset = { 0, 0 };
@@ -513,11 +541,11 @@ public:
 		const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 		models.skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		models.object.loadFromFile(getAssetPath() + "models/bunny.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
-		naniteMesh.setModelPath((getAssetPath() + "models/dragon/").c_str());
+		naniteMesh.setModelPath((getAssetPath() + "models/bunny/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
 		//naniteMesh.generateNaniteInfo();
 		/*naniteMesh.meshes[0].initVertexBuffer();
 		naniteMesh.meshes[0].createVertexBuffer(vulkanDevice, queue);
@@ -533,9 +561,16 @@ public:
 			naniteMesh.meshes[i].initVertexBuffer();
 			naniteMesh.meshes[i].createVertexBuffer(vulkanDevice, queue);
 		}
-		instance1 = Instance(&naniteMesh, model0);
+		instance1 = Instance(&naniteMesh, modelMats[0]);
+		auto& instance2 = Instance(&naniteMesh, modelMats[1]);
+		auto & instance3 = Instance(&naniteMesh, modelMats[2]);
+		instance1.initBufferForNaniteLODs();
 		instance1.createBuffersForNaniteLODs(vulkanDevice, queue);
-		instance1.buildClusterInfo();
+		//instance1.buildClusterInfo();
+		scene.naniteObjects.push_back(instance1);
+		scene.naniteObjects.push_back(instance2);
+		scene.naniteObjects.push_back(instance3);
+		scene.createBuffersForNaniteObjects(vulkanDevice, queue);
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
 		textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
@@ -553,7 +588,7 @@ public:
 		auto manager = VulkanDescriptorSetManager::getManager();
 		std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings;
 		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
@@ -563,6 +598,8 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 7),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 8),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 10),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT, 11),
 		};
 		manager->addSetLayout("objectDraw", setLayoutBindings, 6);
 
@@ -590,7 +627,8 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6)
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 7),
 		};
 		manager->addSetLayout("culling", setLayoutBindings, 1);
 
@@ -603,6 +641,9 @@ public:
 
 		manager->createLayoutsAndSets(device);
 
+		culledObjectIndicesBuffer.setupDescriptor();
+		modelMatsBuffer.setupDescriptor();
+
 		//Object camera view
 		manager->writeToSet("objectDraw", 0, 0, &uniformBuffers.object.descriptor);
 		manager->writeToSet("objectDraw", 0, 1, &uniformBuffers.params.descriptor);
@@ -614,6 +655,9 @@ public:
 		manager->writeToSet("objectDraw", 0, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 0, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 0, 9, &textures.roughnessMap.descriptor);
+		manager->writeToSet("objectDraw", 0, 10, &culledObjectIndicesBuffer.descriptor);
+		manager->writeToSet("objectDraw", 0, 11, &modelMatsBuffer.descriptor);
+
 
 		//Object top view
 		manager->writeToSet("objectDraw", 1, 0, &uniformBuffers.topObject.descriptor);
@@ -626,6 +670,8 @@ public:
 		manager->writeToSet("objectDraw", 1, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 1, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 1, 9, &textures.roughnessMap.descriptor);
+		manager->writeToSet("objectDraw", 1, 10, &culledObjectIndicesBuffer.descriptor);
+		manager->writeToSet("objectDraw", 1, 11, &modelMatsBuffer.descriptor);
 
 		//Cube camera view
 		manager->writeToSet("objectDraw", 2, 0, &uniformBuffers.cube.descriptor);
@@ -638,7 +684,8 @@ public:
 		manager->writeToSet("objectDraw", 2, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 2, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 2, 9, &textures.roughnessMap.descriptor);
-
+		manager->writeToSet("objectDraw", 2, 10, &culledObjectIndicesBuffer.descriptor);
+		manager->writeToSet("objectDraw", 2, 11, &modelMatsBuffer.descriptor);
 		//Cube top view
 		manager->writeToSet("objectDraw", 3, 0, &uniformBuffers.topCube.descriptor);
 		manager->writeToSet("objectDraw", 3, 1, &uniformBuffers.params.descriptor);
@@ -650,6 +697,8 @@ public:
 		manager->writeToSet("objectDraw", 3, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 3, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 3, 9, &textures.roughnessMap.descriptor);
+		manager->writeToSet("objectDraw", 3, 10, &culledObjectIndicesBuffer.descriptor);
+		manager->writeToSet("objectDraw", 3, 11, &modelMatsBuffer.descriptor);
 
 		//Skybox camera view
 		manager->writeToSet("objectDraw", 4, 0, &uniformBuffers.skybox.descriptor);
@@ -694,6 +743,7 @@ public:
 		drawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		projectedErrorBuffer.setupDescriptor();
+		culledObjectIndicesBuffer.setupDescriptor();
 		VkDescriptorBufferInfo inputIndicesInfo{};
 		inputIndicesInfo.buffer = instance1.indices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
@@ -704,6 +754,7 @@ public:
 		manager->writeToSet("culling", 0, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
+		manager->writeToSet("culling", 0, 7, &culledObjectIndicesBuffer.descriptor);
 
 		//Error projection
 		errorInfoBuffer.setupDescriptor();
@@ -726,7 +777,8 @@ public:
 		VkPipelineMultisampleStateCreateInfo multisampleState = vks::initializers::pipelineMultisampleStateCreateInfo(VK_SAMPLE_COUNT_1_BIT);
 		std::vector<VkDynamicState> dynamicStateEnables = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
 		VkPipelineDynamicStateCreateInfo dynamicState = vks::initializers::pipelineDynamicStateCreateInfo(dynamicStateEnables);
-		std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
+		std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages;
+		std::array<VkPipelineShaderStageCreateInfo, 3> pbrShaderStages;
 
 
 		auto descManager = VulkanDescriptorSetManager::getManager();
@@ -748,7 +800,8 @@ public:
 		pipelineCI.pViewportState = &viewportState;
 		pipelineCI.pDepthStencilState = &depthStencilState;
 		pipelineCI.pDynamicState = &dynamicState;
-		pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+		//pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+		pipelineCI.stageCount = 2;
 		pipelineCI.pStages = shaderStages.data();
 		pipelineCI.pVertexInputState = vkglTF::Vertex::getPipelineVertexInputState({ 
 			vkglTF::VertexComponent::Position, 
@@ -764,16 +817,21 @@ public:
 		shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/skybox.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.skybox));
 
+		pipelineCI.stageCount = static_cast<uint32_t>(shaderStages.size());
+		//pipelineCI.pStages = pbrShaderStages.data();
 		// PBR pipeline
 		rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
 		rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
 		//rasterizationState.cullMode = VK_CULL_MODE_NONE;
 		shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 		shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+		shaderStages[2] = loadShader(getShadersPath() + "pbrtexture/pbrtexture.geom.spv", VK_SHADER_STAGE_GEOMETRY_BIT);
 		// Enable depth test and write
 		depthStencilState.depthWriteEnable = VK_TRUE;
 		depthStencilState.depthTestEnable = VK_TRUE;
 		VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.pbr));
+		
+		pipelineCI.stageCount = 2;
 
 		{
 			// Debug Draw Quad pipeline
@@ -1828,15 +1886,23 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			instance1.indices.count * sizeof(uint32_t),
+			scene.indices.count * sizeof(uint32_t),
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.indices.count * sizeof(uint32_t),
+			&culledObjectIndicesBuffer.buffer,
+			&culledObjectIndicesBuffer.memory,
+			nullptr));
 		
-		for (auto& ci:instance1.clusterInfo)
+		for (auto& ci:scene.clusterInfo)
 		{
-			assert(ci.triangleIndicesEnd >= 0 && ci.triangleIndicesEnd <= instance1.indices.count / 3);
-			assert(ci.triangleIndicesStart >= 0 && ci.triangleIndicesStart < instance1.indices.count / 3);
+			assert(ci.triangleIndicesEnd >= 0 && ci.triangleIndicesEnd <= scene.indices.count / 3);
+			assert(ci.triangleIndicesStart >= 0 && ci.triangleIndicesStart < scene.indices.count / 3);
 			assert(ci.triangleIndicesStart < ci.triangleIndicesEnd);
 			clusterinfos.emplace_back(ci);
 		}
@@ -1892,7 +1958,7 @@ public:
 		drawIndexedIndirect.firstInstance = 0;
 		drawIndexedIndirect.indexCount = models.object.indexBuffer.size();
 		//drawIndexedIndirect.indexCount = naniteMesh.meshes[naniteMesh.meshes.size()-1].mesh.n_faces();
-		drawIndexedIndirect.instanceCount = 1;
+		drawIndexedIndirect.instanceCount = 2;
 		drawIndexedIndirect.vertexOffset = 0;
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
@@ -1912,12 +1978,12 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			instance1.errorInfo.size() * sizeof(glm::vec2),
+			scene.errorInfo.size() * sizeof(glm::vec2),
 			&projectedErrorBuffer.buffer,
 			&projectedErrorBuffer.memory,
 			nullptr));
 
-		for (auto& ei : instance1.errorInfo)
+		for (auto& ei : scene.errorInfo)
 		{
 			errorinfos.emplace_back(ei);
 		}
@@ -2053,6 +2119,39 @@ public:
 		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
 	}
 
+	void createModelMatsBuffer()
+	{
+		vks::Buffer modelMatsStaging;
+		//std::cout << "size of clusterInfo:" << sizeof(ClusterInfo) << std::endl;
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			modelMats.size() * sizeof(glm::mat4),
+			&modelMatsStaging.buffer,
+			&modelMatsStaging.memory,
+			modelMats.data()));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			modelMats.size() * sizeof(glm::mat4),
+			&modelMatsBuffer.buffer,
+			&modelMatsBuffer.memory,
+			nullptr));
+		VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkBufferCopy copyRegion = {};
+
+		copyRegion.size = modelMats.size() * sizeof(glm::mat4);
+		vkCmdCopyBuffer(copyCmd, modelMatsStaging.buffer, modelMatsBuffer.buffer, 1, &copyRegion);
+
+		vulkanDevice->flushCommandBuffer(copyCmd, queue, true);//TODO: get transfer queue here
+
+		vkDestroyBuffer(vulkanDevice->logicalDevice, modelMatsStaging.buffer, nullptr);
+		vkFreeMemory(vulkanDevice->logicalDevice, modelMatsStaging.memory, nullptr);
+	}
+
 	// Prepare and initialize uniform buffer containing shader uniforms
 	void prepareUniformBuffers()
 	{
@@ -2102,8 +2201,6 @@ public:
 			&uniformBuffers.params,
 			sizeof(uboParams)));
 
-
-
 		// Map persistent
 		VK_CHECK_RESULT(uniformBuffers.object.map());
 		VK_CHECK_RESULT(uniformBuffers.skybox.map());
@@ -2151,6 +2248,7 @@ public:
 		uboMatrices2.model = glm::mat4(glm::mat3(uboMatrices2.view));
 		memcpy(uniformBuffers.topSkybox.mapped, &uboMatrices2, sizeof(uboMatrices2));
 
+		// Error
 		uboErrorMatrices.view = camera.matrices.view;
 		uboErrorMatrices.proj = camera.matrices.perspective;
 		uboErrorMatrices.camRight = camera.getRight();
@@ -2276,6 +2374,7 @@ public:
 		createCullingBuffers();
 		createErrorProjectionBuffer();
 		createHiZBuffer();
+		createModelMatsBuffer();
 		prepareUniformBuffers();
 		setupDescriptors();
 		preparePipelines();

@@ -16,21 +16,29 @@ layout (binding = 0) uniform UBO
 	vec3 camPos;
 } ubo;
 
+layout(binding = 10) buffer readonly ObjectIdIn{
+	uint objectIds[];
+};
+
+layout(binding = 11) buffer readonly ModelMatIn{
+	mat4 inModelMats[];
+};
+
 layout (location = 0) out vec3 outWorldPos;
 layout (location = 1) out vec3 outNormal;
 layout (location = 2) out vec2 outUV;
 layout (location = 3) out vec4 outTangent;
 layout (location = 4) out vec4 outClusterInfos;
 layout(location = 5) out vec4 outClusterGroupInfos;
+layout (location = 6) out flat uint outObjectId;
 
 void main() 
 {
-	vec3 locPos = vec3(ubo.model * vec4(inPos, 1.0));
-	outWorldPos = locPos;
-	outNormal = mat3(ubo.model) * inNormal;
-	outTangent = vec4(mat3(ubo.model) * inTangent.xyz, inTangent.w);
+	outWorldPos = inPos;
+	outNormal = inNormal;
+	outTangent = inTangent;
 	outUV = inUV;
 	outClusterInfos = inClusterInfos;
 	outClusterGroupInfos = inClusterGroupInfos;
-	gl_Position =  ubo.projection * ubo.view * vec4(outWorldPos, 1.0);
+	//gl_Position =  ubo.projection * ubo.view * vec4(outWorldPos, 1.0);
 }

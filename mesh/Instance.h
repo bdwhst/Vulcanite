@@ -12,6 +12,7 @@ struct ClusterInfo {
 	// left close, right open
     alignas(4) uint32_t triangleIndicesStart; // Used to index Mesh::triangleIndicesSortedByClusterIdx
     alignas(4) uint32_t triangleIndicesEnd; // Used to index Mesh::triangleIndicesSortedByClusterIdx
+    alignas(4) uint32_t objectIdx;
 
 	void mergeAABB(const glm::vec3& pMinOther, const glm::vec3& pMaxOther) {
 		pMinWorld = glm::min(pMinWorld, pMinOther);
@@ -37,12 +38,12 @@ struct Instance {
     //TODO: avoid duplication when there are multiple instances of the same model
     vkglTF::Model::Vertices vertices;
     vkglTF::Model::Indices indices;
+    std::vector<vkglTF::Vertex> vertexBuffer;
+    std::vector<uint32_t> indexBuffer;
     Instance(){}
     Instance(NaniteMesh* mesh, const glm::mat4 model):referenceMesh(mesh), rootTransform(model){}
-    void createBuffersForNaniteLODs(vks::VulkanDevice* device, VkQueue transferQueue)
-    {
-        std::vector<vkglTF::Vertex> vertexBuffer;
-        std::vector<uint32_t> indexBuffer;
+
+    void initBufferForNaniteLODs() {
         size_t totalNumVertices = 0;
         size_t totalNumIndices = 0;
         for (int i = 0; i < referenceMesh->meshes.size(); i++)
@@ -73,7 +74,10 @@ struct Instance {
             break;
 #endif // DEBUG_LOD_START
         }
+    }
 
+    void createBuffersForNaniteLODs(vks::VulkanDevice* device, VkQueue transferQueue)
+    {
         size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
         vertices.count = static_cast<uint32_t>(vertexBuffer.size());
 

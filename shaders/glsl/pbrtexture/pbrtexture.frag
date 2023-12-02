@@ -6,6 +6,7 @@ layout (location = 2) in vec2 inUV;
 layout (location = 3) in vec4 inTangent;
 layout (location = 4) in vec4 inClusterInfos;
 layout (location = 5) in vec4 inClusterGroupInfos;
+layout (location = 6) in flat uint inObjectId;
 
 layout (binding = 0) uniform UBO {
 	mat4 projection;
@@ -133,6 +134,15 @@ layout(push_constant) uniform PushConstants {
 
 void main()
 {		
+	//if (inObjectId == 0) {
+	//	outColor = vec4(0.0, 0.0, 0.0, 0.0);
+	//	return;
+	//}
+	//else if (inObjectId == 1) {
+	//	outColor = vec4(1.0, 1.0, 1.0, 1.0);
+	//	return;
+	//}
+	//return;
 	if(pcs.vis_clusters==2)
 	{
 		int clusterId = int(inClusterInfos.w);

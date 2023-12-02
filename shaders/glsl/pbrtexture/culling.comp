@@ -10,6 +10,7 @@ struct Cluster
     vec3 pMax;
     uint triangleStart;
     uint triangleEnd;
+    uint objectId;
 };
 
 
@@ -45,6 +46,10 @@ layout(set = 0, binding = 5) uniform sampler2D lastHZB;
 
 layout(std430, set = 0, binding = 6) buffer readonly ProjectedError {
    vec2 errorData[ ];
+};
+
+layout(std430, set = 0, binding = 7) buffer writeonly ObjectIdOut{
+   uint outObjectIds[ ];
 };
 
 layout(push_constant) uniform PushConstants {
@@ -200,6 +205,8 @@ void main()
     if(minZ>maxHiz) culled = true;
 
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
+    //if (currCluster.objectId == 1) culled = true;
+    //culled = false;
     if(!culled)
     {
         uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
@@ -212,6 +219,13 @@ void main()
             outTriangles[outIdx + 0] = inTriangles[inIdx + 0];
             outTriangles[outIdx + 1] = inTriangles[inIdx + 1];
             outTriangles[outIdx + 2] = inTriangles[inIdx + 2];
+            outObjectIds[outIdx + 0] = currCluster.objectId;
+            outObjectIds[outIdx + 1] = currCluster.objectId;
+            outObjectIds[outIdx + 2] = currCluster.objectId;
+            //int s = int(currCluster.objectId == 0) * 2 - 1;
+            //outObjectIds[outIdx + 0] = s * int(inTriangles[inIdx + 0]);
+            //outObjectIds[outIdx + 1] = s * int(inTriangles[inIdx + 1]);
+            //outObjectIds[outIdx + 2] = s * int(inTriangles[inIdx + 2]);
         }
     }
 }

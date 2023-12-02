@@ -102,7 +102,6 @@ public:
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Vertex> uniqueVertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
-	
 };
 
 //using OpenMesh::Decimater::ModQuadricT;

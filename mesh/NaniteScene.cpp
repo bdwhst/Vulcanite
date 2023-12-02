@@ -1,42 +1,27 @@
 #include "NaniteScene.h"
 
-void NaniteScene::createBuffersForNaniteObjects(vks::VulkanDevice* device, VkQueue transferQueue)
+void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue)
 {
     std::vector<vkglTF::Vertex> vertexBuffer;
     std::vector<uint32_t> indexBuffer;
 
-    size_t totalVertexCount = 0;
-    size_t totalIndexCount = 0;
-
-	for (auto& naniteObject : naniteObjects) {
-		naniteObject.initBufferForNaniteLODs();
-        totalVertexCount += naniteObject.vertexBuffer.size();
-        totalIndexCount += naniteObject.indexBuffer.size();
-        //naniteObject.createBuffersForNaniteLODs(device, transferQueue);
-		naniteObject.buildClusterInfo();
-        errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
-	}
-
-    vertexBuffer.reserve(totalVertexCount);
-    indexBuffer.reserve(totalIndexCount);
     int indexOffset = 0;
-    for (int i = 0; i < naniteObjects.size(); ++i) {
-        const auto & naniteObject = naniteObjects[i];
-        vertexBuffer.insert(vertexBuffer.end(), naniteObject.vertexBuffer.begin(), naniteObject.vertexBuffer.end());
-        for (auto index : naniteObject.indexBuffer) {
-			//index += indexOffset;
+    indexOffsets.resize(naniteMeshes.size());
+    indexCounts.resize(naniteMeshes.size());
+
+    for (int i = 0; i < naniteMeshes.size(); ++i) {
+        auto& naniteMesh = naniteMeshes[i];
+        // Init vertex & index buffer
+        auto& instance = Instance(&naniteMesh, glm::mat4(1.0f));
+        instance.initBufferForNaniteLODs();
+        vertexBuffer.insert(vertexBuffer.end(), instance.vertexBuffer.begin(), instance.vertexBuffer.end());
+        for (auto index : instance.indexBuffer) {
+            index += indexOffset;
             indexBuffer.push_back(index);
-		}
-
-        for (auto ci: naniteObject.clusterInfo )
-        {
-            //ci.triangleIndicesStart += indexOffset;
-            //ci.triangleIndicesEnd += indexOffset;
-            ci.objectIdx = i;
-            clusterInfo.push_back(ci);
         }
-
-		indexOffset += naniteObject.indexBuffer.size();
+        indexOffsets[i] = indexOffset;
+        indexCounts[i] = instance.indexBuffer.size();
+        indexOffset += instance.indexBuffer.size();
     }
 
     size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
@@ -114,34 +99,26 @@ void NaniteScene::createBuffersForNaniteObjects(vks::VulkanDevice* device, VkQue
 
     vkDestroyBuffer(device->logicalDevice, indexStaging.buffer, nullptr);
     vkFreeMemory(device->logicalDevice, indexStaging.memory, nullptr);
-
 }
 
-// void NaniteScene::buildClusterInfo()
-// {
-// 
-//     for (auto& naniteObject : naniteObjects) {
-//         naniteObject.initBufferForNaniteLODs();
-//         //naniteObject.createBuffersForNaniteLODs(device, transferQueue);
-//         naniteObject.buildClusterInfo();
-//         errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
-//     }
-// 
-//     int indexOffset = 0;
-//     for (uint i = 0; i < naniteObjects.size();  i++) {
-//         auto& naniteObject = naniteObjects[i];
-//         for (auto index : naniteObject.indexBuffer) {
-//             index += indexOffset;
-//         }
-// 
-//         for (auto ci : naniteObject.clusterInfo)
-//         {
-//             ci.triangleIndicesStart += indexOffset;
-//             ci.triangleIndicesEnd += indexOffset;
-//             ci.objectIdx = 1;
-//             clusterInfo.push_back(ci);
-//         }
-// 
-//         indexOffset += naniteObject.indexBuffer.size();
-//     }
-// }
+
+void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transferQueue)
+{
+    sceneIndicesCount = 0;
+    for (int i = 0; i < naniteObjects.size(); ++i) {
+        auto& naniteObject = naniteObjects[i];
+        naniteObject.buildClusterInfo();
+        auto referenceMeshIndex = std::find(naniteMeshes.begin(), naniteMeshes.end(), *(naniteObject.referenceMesh)) - naniteMeshes.begin();
+        for (auto ci : naniteObject.clusterInfo)
+        {
+            // TODO: Should adjust this part when multiple meshes are imported
+            //auto referenceMeshIndex = 0;
+            ci.triangleIndicesStart += indexOffsets[referenceMeshIndex];
+            ci.triangleIndicesEnd += indexOffsets[referenceMeshIndex];
+            ci.objectIdx = i;
+            clusterInfo.push_back(ci);
+        }
+        errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
+        sceneIndicesCount += indexCounts[referenceMeshIndex];
+    }
+}

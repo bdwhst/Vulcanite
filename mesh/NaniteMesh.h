@@ -61,6 +61,16 @@ struct NaniteMesh {
 
 	std::vector<Mesh> debugMeshes;
 	void checkDeserializationResult(const std::string& filepath);
+
+	bool operator==(const NaniteMesh & other) const {
+		if (meshes.size() != other.meshes.size()) return false;
+		for (int i = 0; i < meshes.size(); i++)
+		{
+			if (meshes[i].mesh.n_vertices() != other.meshes[i].mesh.n_vertices()) return false;
+			if (meshes[i].mesh.n_faces() != other.meshes[i].mesh.n_faces()) return false;
+		}
+		return true;
+	}
 };
 
 void loadvkglTFModel(const vkglTF::Model& model, std::vector<NaniteMesh>& naniteMeshes);

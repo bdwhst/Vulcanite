@@ -198,6 +198,8 @@ bool occlusionCulling(Cluster c)
     return minZ>maxHiz;
 }
 
+shared uint local_size;
+shared uint group_start;
 
 void main()
 {
@@ -215,15 +217,29 @@ void main()
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
+    if(gl_LocalInvocationID.x==0)
+    {
+        local_size=0;
+    }
+    barrier();
+
+    uint totalVertices = culled?0:(indata[index].triangleEnd - indata[index].triangleStart)*3;
+    //TODO: reduce atomicity with shared memory
+    uint localIdx = atomicAdd(local_size, totalVertices);
+    barrier();
+    
+    if(gl_LocalInvocationID.x==0)
+    {
+        group_start = atomicAdd(numVertices.indexCount, local_size);
+    }
+    barrier();
+
     if(!culled)
     {
-        uint totalVertices = (indata[index].triangleEnd - indata[index].triangleStart)*3;
-        //TODO: reduce atomicity with shared memory
-        uint nIdx = atomicAdd(numVertices.indexCount, totalVertices);
         for(uint i = 0; i < totalVertices / 3; i++)
         {
             uint inIdx = indata[index].triangleStart * 3 + 3 * i;
-            uint outIdx = nIdx + 3 * i;
+            uint outIdx = group_start + localIdx + 3 * i;
             outTriangles[outIdx + 0] = inTriangles[inIdx + 0];
             outTriangles[outIdx + 1] = inTriangles[inIdx + 1];
             outTriangles[outIdx + 2] = inTriangles[inIdx + 2];

@@ -580,18 +580,18 @@ public:
 		scene.naniteMeshes.push_back(naniteMesh);
 
 		// Uncomment this part for performance test scene
-		modelMats.clear();
-		for (int i = -7; i <= 7; i++)
-		{
-			for (int j = -7; j <= 7; j++) 
-			{
-				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
-				auto& instance = Instance(&naniteMesh, modelMat);
-				modelMats.push_back(modelMat);
-				scene.naniteObjects.push_back(instance);
-		
-			}
-		}
+		//modelMats.clear();
+		//for (int i = -7; i <= 7; i++)
+		//{
+		//	for (int j = -7; j <= 7; j++) 
+		//	{
+		//		auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
+		//		auto& instance = Instance(&naniteMesh, modelMat);
+		//		modelMats.push_back(modelMat);
+		//		scene.naniteObjects.push_back(instance);
+		//
+		//	}
+		//}
 
 		// Uncomment this part for normal scene
 		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
@@ -601,20 +601,56 @@ public:
 		//scene.naniteObjects.push_back(instance2);
 		//scene.naniteObjects.push_back(instance3);
 
+		// Uncomment this part for normal multi-mesh scene
+		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		scene.naniteObjects.push_back(instance1);
+		NaniteMesh naniteMesh2;
+		naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
+		naniteMesh2.loadvkglTFModel(models.object);
+		naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
+		for (int i = 0; i < naniteMesh2.meshes.size(); i++)
+		{
+			naniteMesh2.meshes[i].initUniqueVertexBuffer();
+			naniteMesh2.meshes[i].initVertexBuffer();
+			naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
+		}
+		scene.naniteMeshes.push_back(naniteMesh2);
+		auto& instance2 = Instance(&naniteMesh2, modelMats[1]);
+		scene.naniteObjects.push_back(instance2);
+
+		// Uncomment this part for performance test multi-mesh scene
 		//NaniteMesh naniteMesh2;
-		//naniteMesh2.setModelPath((getAssetPath() + "models/dragon/").c_str());
+		//naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
 		//naniteMesh2.loadvkglTFModel(models.object);
-		//naniteMesh2.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);
+		//naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
 		//for (int i = 0; i < naniteMesh2.meshes.size(); i++)
 		//{
 		//	naniteMesh2.meshes[i].initUniqueVertexBuffer();
 		//	naniteMesh2.meshes[i].initVertexBuffer();
 		//	naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
 		//}
+		//scene.naniteMeshes.push_back(naniteMesh2);
 		//
-		//auto& instance4 = Instance(&naniteMesh2, modelMats[3]);
-		//auto& instance5 = Instance(&naniteMesh2, modelMats[4]);
+		//modelMats.clear();
+		//for (int i = -2; i <= 2; i++)
+		//{
+		//	for (int j = -2; j <= 2; j++) 
+		//	{
+		//		auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
+		//		if (i % 2) {
+		//			auto& instance = Instance(&naniteMesh, modelMat);
+		//			scene.naniteObjects.push_back(instance);
+		//		}
+		//		else{
+		//			auto& instance = Instance(&naniteMesh2, modelMat);
+		//			scene.naniteObjects.push_back(instance);
+		//		}
+		//		modelMats.push_back(modelMat);
 		//
+		//	}
+		//}
+
+		////
 		scene.createVertexIndexBuffer(vulkanDevice, queue);
 		scene.createClusterInfos(vulkanDevice, queue);
 		//reducedModel.simplifyModel(vulkanDevice, queue);
@@ -1940,6 +1976,7 @@ public:
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			scene.sceneIndicesCount / 2 * sizeof(uint32_t),
+			//width * height * CLUSTER_THRESHOLD * 3 * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));
@@ -1948,6 +1985,7 @@ public:
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			scene.sceneIndicesCount / 2 * sizeof(uint16_t),
+			//width * height * CLUSTER_THRESHOLD * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
 			&culledObjectIndicesBuffer.buffer,
 			&culledObjectIndicesBuffer.memory,
 			nullptr));
@@ -2493,6 +2531,8 @@ public:
 	void prepare()
 	{
 		enabledDeviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+		enabledDeviceExtensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+		enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 		VulkanExampleBase::prepare();
 		loadAssets();
 		generateBRDFLUT();

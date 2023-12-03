@@ -238,5 +238,11 @@ Multi-instance
 		正确的做法应该是：直接将culledIndices和objectIndices合在一起通过computeShader生成一个visibilityBuffer
 		如何创建？
 
-1. culled == false 之后会出现闪烁的问题
-2. 
+
+12.2 
+
+Multiple mesh 现在的问题：
+![Alt text](./images/multiple_object_broken.png)
+
+可能是什么引起的呢？
+- 对于dragon来说，它的索引应该是指不到bunny的mesh才对的，而对于bunny来说，它的objectId又更不应该对应dragon的modelMatrix。所以这种情况出现就是违背了前面两个条件的其中一种，但是如果是dragon的索引指向了bunny的vertex，最终出来的兔子耳朵不会这么完整，所以更可能的情况是：bunny的objectId指向了dragon。但是为什么在没有多个mesh的时候就没有出现这个情况呢？

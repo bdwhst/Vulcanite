@@ -21,7 +21,7 @@ void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue tra
         }
         indexOffsets[i] = indexOffset;
         indexCounts[i] = instance.indexBuffer.size();
-        indexOffset += instance.indexBuffer.size();
+        indexOffset += instance.vertexBuffer.size();
     }
 
     size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
@@ -113,8 +113,10 @@ void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transfer
         {
             // TODO: Should adjust this part when multiple meshes are imported
             //auto referenceMeshIndex = 0;
-            ci.triangleIndicesStart += indexOffsets[referenceMeshIndex];
-            ci.triangleIndicesEnd += indexOffsets[referenceMeshIndex];
+            if (referenceMeshIndex != 0) {
+                ci.triangleIndicesStart += indexCounts[referenceMeshIndex-1] / 3;
+                ci.triangleIndicesEnd += indexCounts[referenceMeshIndex-1] / 3;
+            }
             ci.objectIdx = i;
             clusterInfo.push_back(ci);
         }

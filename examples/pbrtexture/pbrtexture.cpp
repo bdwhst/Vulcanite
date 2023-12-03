@@ -551,9 +551,9 @@ public:
 		const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
 		models.skybox.loadFromFile(getAssetPath() + "models/cube.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		//models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
 		
+		models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		naniteMesh.setModelPath((getAssetPath() + "models/dragon/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
 		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);

@@ -505,6 +505,7 @@ void Mesh::getBoundingSphere(Cluster& cluster)
 
     cluster.boundingSphereCenter = glm::vec3(c[0], c[1], c[2]);
     cluster.boundingSphereRadius = r;
+    ASSERT(cluster.boundingSphereRadius > 0, "cluster.boundingSphereRadius <= 0");
 
     //// Test code
     //for (const auto triangleIndex : cluster.triangleIndices)

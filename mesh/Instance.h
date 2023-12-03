@@ -235,7 +235,11 @@ struct Instance {
                 glm::vec3 worldCenter = glm::vec3(rootTransform * glm::vec4(cluster.boundingSphereCenter, 1.0));
                 //TODO: handle arbitary scaling
                 float worldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(cluster.boundingSphereRadius, 0, 0), 0.0));
-                assert(worldRadius > 0);
+                //std::cout << cluster.triangleIndices.size() << std::endl;
+                //std::cout << cluster.boundingSphereRadius << " " << worldRadius << std::endl;
+                ASSERT(cluster.triangleIndices.size() <= CLUSTER_THRESHOLD, "cluster.triangleIndices.size() is over thresold");
+                ASSERT(cluster.boundingSphereRadius > 0 || cluster.triangleIndices.size() == 0, "boundingSphereRadius <= 0");
+                ASSERT(worldRadius > 0 || cluster.triangleIndices.size() == 0, "worldRadius <= 0");
                 errorInfo[j + currClusterNum].centerR = glm::vec4(worldCenter, worldRadius);
                 float parentBoundingRadius = 0;
                 glm::vec3 parentCenter = glm::vec3(0);

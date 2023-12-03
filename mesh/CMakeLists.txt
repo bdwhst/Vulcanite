@@ -8,6 +8,7 @@ set(headers
     "NaniteScene.h"
     "Graph.h"
     "utils.h"
+    "Config.h"
     "Instance.h"
 )
 

@@ -14,7 +14,7 @@ struct Vertex {
 	vec4 joint0;
 	vec4 weight0;
 	vec4 tangent;
-}
+};
 
 layout(std430, set = 0, binding = 0) buffer readonly VerticesIn {
    Vertex inVertices[ ];
@@ -36,11 +36,8 @@ layout(set = 0, binding = 4) uniform UBO{
 	uint num_triangles;
 }ubo;
 
-layout(set = 0, binding = 5) uniform UBO{
-	uint num_triangles;
-}ubo;
 
-layout(set = 0, binding = 6, r64ui) uniform image2D swrImage;
+layout(set = 0, binding = 5, r64ui) uniform uimage2D swrImage;
 
 
 

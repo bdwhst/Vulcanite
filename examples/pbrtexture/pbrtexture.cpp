@@ -564,7 +564,7 @@ public:
 		models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		naniteMesh.setModelPath((getAssetPath() + "models/dragon/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", false);
 
 		for (int i = 0; i < naniteMesh.meshes.size(); i++)
 		{

@@ -32,7 +32,8 @@ struct Cluster{
             {"lodError", lodError},
             {"boundingSphereCenter", {boundingSphereCenter.x, boundingSphereCenter.y, boundingSphereCenter.z}},
             {"boundingSphereRadius", boundingSphereRadius},
-            {"parentClusterIndices", parentClusterIndices}
+            {"parentClusterIndices", parentClusterIndices},
+            {"triangleIndices", triangleIndices}
         };
     }
 
@@ -62,6 +63,10 @@ struct Cluster{
         for (auto& idx : j["parentClusterIndices"]) {
 			parentClusterIndices.emplace_back(idx.get<uint32_t>());
 		}
+        ASSERT(j.find("triangleIndices") != j.end() && j["triangleIndices"].is_array(), "triangleIndices not found");
+        for (auto& idx : j["triangleIndices"]) {
+            triangleIndices.emplace_back(idx.get<uint32_t>());
+        }
     }
 };
 

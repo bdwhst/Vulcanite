@@ -4,6 +4,7 @@
 #include "Common.h"
 #include "Graph.h"
 #include "utils.h"
+#include "Config.h"
 
 /*
 	Need to refactor ClusterGroup
@@ -36,7 +37,7 @@ struct ClusterGroup {
 	
 	// Local triangle graph partition related
 	std::vector<idx_t> localTriangleClusterIndices; // Stores the local cluster indices of local triangles
-	const int targetClusterSize = 31;
+	const int targetClusterSize = CLUSTER_SIZE;
 	idx_t localClusterNum;
 	Graph localTriangleGraph;
 	

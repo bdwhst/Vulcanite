@@ -58,14 +58,14 @@ public:
 	uint32_t lodLevel = -1;
 	Graph triangleGraph;
 	int clusterNum;
-	const int targetClusterSize = 31;
+	const int targetClusterSize = CLUSTER_SIZE;
 	std::vector<idx_t> triangleClusterIndex;
 	std::unordered_map<int, int> clusterColorAssignment;
 	std::vector<Cluster> clusters;
 
 	Graph clusterGraph;
 	int clusterGroupNum;
-	const int targetClusterGroupSize = 15;
+	const int targetClusterGroupSize = CLUSTER_GROUP_SIZE;
 	std::vector<idx_t> clusterGroupIndex;
 	std::unordered_map<int, int> clusterGroupColorAssignment;
 	std::vector<ClusterGroup> clusterGroups;

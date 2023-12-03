@@ -231,6 +231,14 @@ public:
 		if (deviceFeatures.geometryShader) {
 			enabledFeatures.geometryShader = VK_TRUE;
 		}
+		if (deviceFeatures.shaderInt64) {
+			enabledFeatures.shaderInt64 = VK_TRUE;
+		}
+	}
+
+	virtual void getEnabledExtensions()
+	{
+		enabledDeviceExtensions.emplace_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
 	}
 
 	void buildCommandBuffers()

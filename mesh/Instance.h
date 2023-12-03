@@ -235,7 +235,7 @@ struct Instance {
                 glm::vec3 worldCenter = glm::vec3(rootTransform * glm::vec4(cluster.boundingSphereCenter, 1.0));
                 //TODO: handle arbitary scaling
                 float worldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(cluster.boundingSphereRadius, 0, 0), 0.0));
-                assert(worldRadius > 0);
+                ASSERT(worldRadius > 0, "World radius should be greater than 0");
                 errorInfo[j + currClusterNum].centerR = glm::vec4(worldCenter, worldRadius);
                 float parentBoundingRadius = 0;
                 glm::vec3 parentCenter = glm::vec3(0);

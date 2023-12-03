@@ -78,6 +78,7 @@ VkResult VulkanExampleBase::createInstance(bool enableValidation)
 		enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 	}
 #endif
+	getEnabledInstanceExtensions();
 
 	// Enabled requested instance extensions
 	if (enabledInstanceExtensions.size() > 0) 
@@ -1059,7 +1060,7 @@ bool VulkanExampleBase::initVulkan()
 	vulkanDevice = new vks::VulkanDevice(physicalDevice);
 
 	// Derived examples can enable extensions based on the list of supported extensions read from the physical device
-	getEnabledExtensions();
+	getEnabledDeviceExtensions();
 
 	VkResult res = vulkanDevice->createLogicalDevice(enabledFeatures, enabledDeviceExtensions, deviceCreatepNextChain);
 	if (res != VK_SUCCESS) {
@@ -3135,7 +3136,9 @@ void VulkanExampleBase::setupRenderPass()
 
 void VulkanExampleBase::getEnabledFeatures() {}
 
-void VulkanExampleBase::getEnabledExtensions() {}
+void VulkanExampleBase::getEnabledDeviceExtensions() {}
+
+void VulkanExampleBase::getEnabledInstanceExtensions() {}
 
 void VulkanExampleBase::windowResize()
 {

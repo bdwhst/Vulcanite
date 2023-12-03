@@ -236,7 +236,12 @@ public:
 		}
 	}
 
-	virtual void getEnabledExtensions()
+	virtual void getEnabledInstanceExtensions()
+	{
+		enabledInstanceExtensions.emplace_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+	}
+
+	virtual void getEnabledDeviceExtensions()
 	{
 		enabledDeviceExtensions.emplace_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
 	}
@@ -564,7 +569,7 @@ public:
 		models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		naniteMesh.setModelPath((getAssetPath() + "models/dragon/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", false);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);
 
 		for (int i = 0; i < naniteMesh.meshes.size(); i++)
 		{

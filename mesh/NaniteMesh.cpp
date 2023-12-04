@@ -177,7 +177,7 @@ void NaniteMesh::serialize(const std::string& filepath)
 		auto& mesh = meshes[i];
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
 		// Export the mesh to the specified file
-		if (!OpenMesh::IO::write_mesh(mesh.mesh, output_filename, OpenMesh::IO::Options::VertexNormal)) {
+		if (!OpenMesh::IO::write_mesh(mesh.mesh, output_filename, OpenMesh::IO::Options::VertexNormal  | OpenMesh::IO::Options::VertexTexCoord)) {
 			std::cerr << "Error exporting mesh to " << output_filename << std::endl;
 		}
 	}
@@ -226,7 +226,8 @@ void NaniteMesh::deserialize(const std::string & filepath)
 	{
 		std::string output_filename = std::string(filepath) + "LOD_" + std::to_string(i) + ".obj";
 		meshes[i].mesh.request_vertex_normals();
-		OpenMesh::IO::Options opt = OpenMesh::IO::Options::VertexNormal;
+		meshes[i].mesh.request_vertex_texcoords2D();
+		OpenMesh::IO::Options opt = OpenMesh::IO::Options::VertexNormal | OpenMesh::IO::Options::VertexTexCoord;
 		if (!OpenMesh::IO::read_mesh(meshes[i].mesh, output_filename, opt)) {
 			ASSERT(0, "failed to load mesh");
 		}

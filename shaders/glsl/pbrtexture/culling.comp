@@ -22,17 +22,17 @@ layout(std430, set = 0, binding = 1) buffer readonly TrianglesIn {
    uint inTriangles[ ];
 };
 
-layout(std430, set = 0, binding = 2) buffer writeonly TrianglesOut {
-   uint outTriangles[ ];
+layout(std430, set = 0, binding = 2) buffer writeonly TrianglesOut_hw {
+   uint outTriangles_hw[ ];
 };
 
-layout(std430, set = 0, binding = 3) buffer NumVertices {
+layout(std430, set = 0, binding = 3) buffer NumVertices_hw {
     uint indexCount; 
     uint instanceCount;
     uint firstIndex;
     uint vertexOffset;
     uint firstInstance;
-} numVertices;
+} numVertices_hw;
 
 layout(set = 0, binding = 4) uniform UBOMats {
     mat4 model; //unused
@@ -48,9 +48,23 @@ layout(std430, set = 0, binding = 6) buffer readonly ProjectedError {
    vec2 errorData[ ];
 };
 
-layout(std430, set = 0, binding = 7) buffer writeonly ObjectIdOut{
-   uint outObjectIds[ ];
+layout(std430, set = 0, binding = 7) buffer writeonly IdOut_hw{
+   uvec3 outIds_hw[ ];
 };
+
+layout(std430, set = 0, binding = 8) buffer writeonly TrianglesOut_sw {
+   uint outTriangles_sw[ ];
+};
+
+layout(std430, set = 0, binding = 9) buffer writeonly IdOut_sw {
+   uvec3 outIds_sw[ ];
+};
+
+layout(std430, set = 0, binding = 10) buffer writeonly NumVertices_sw {
+   uint indexCount;
+}numVertices_sw;
+
+
 
 layout(push_constant) uniform PushConstants {
     int numClusters;
@@ -177,7 +191,7 @@ bool frustrumCulling(Cluster c)
     return !inFrustrum;
 }
 
-bool occlusionCulling(Cluster c)
+bool occlusionCulling(Cluster c, out float pixelArea)
 {
     vec4 clipXY;
     float minZ;
@@ -185,6 +199,7 @@ bool occlusionCulling(Cluster c)
     vec4 screenSize = textureSize(lastHZB, 0).xyxy;
     vec4 screenXY = clipXY * screenSize;
     vec2 screenSpan = screenXY.zw-screenXY.xy;
+    pixelArea = screenSpan.x*screenSpan.y;
     float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
     float hzbLevel_1 = max(hzbLevel-1,0);
     float texScale = exp2(-hzbLevel_1);
@@ -198,8 +213,11 @@ bool occlusionCulling(Cluster c)
     return minZ>maxHiz;
 }
 
-shared uint local_size;
-shared uint group_start;
+shared uint local_size_hw;
+shared uint group_start_hw;
+shared uint local_size_sw;
+shared uint group_start_sw;
+
 
 void main()
 {
@@ -209,43 +227,86 @@ void main()
 
     bool culled = false;
     Cluster currCluster = indata[index];
+    float pixelArea;
     if(pcs.useFrustrumOcclusion==1)
     {
         culled = culled || frustrumCulling(currCluster);
-        culled = culled || occlusionCulling(currCluster);
+        culled = culled || occlusionCulling(currCluster,pixelArea);
+    }
+    else
+    {
+        vec4 clipXY;
+        float minZ;
+        getScreenAABB(currCluster,clipXY,minZ);
+        vec4 screenSize = textureSize(lastHZB, 0).xyxy;
+        vec4 screenXY = clipXY * screenSize;
+        vec2 screenSpan = screenXY.zw-screenXY.xy;
+        pixelArea = screenSpan.x*screenSpan.y;
     }
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
+    bool useSWR = pixelArea<128.0;
+    //bool useSWR = false;
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
-    if(gl_LocalInvocationID.x==0)
-    {
-        local_size=0;
-    }
-    barrier();
+    // if(gl_LocalInvocationID.x==0)
+    // {
+    //     local_size_hw=0;
+    //     local_size_sw=0;
+    // }
+    // barrier();
 
     uint totalVertices = culled?0:(indata[index].triangleEnd - indata[index].triangleStart)*3;
     //TODO: reduce atomicity with shared memory
-    uint localIdx = atomicAdd(local_size, totalVertices);
-    barrier();
+    // uint localIdx;
+    // if(!useSWR)
+    // {
+    //     localIdx = atomicAdd(local_size_hw, totalVertices);
+    // }
+    // else
+    // {
+    //     localIdx = atomicAdd(local_size_sw, totalVertices);
+    // }
+    // barrier();
     
-    if(gl_LocalInvocationID.x==0)
+    // if(gl_LocalInvocationID.x==0)
+    // {
+    //     if(!useSWR)
+    //         group_start_hw = atomicAdd(numVertices.indexCount, local_size_hw);
+    //     else
+    //         group_start_sw = atomicAdd(numVertices.indexCount, local_size_sw);
+    // }
+    // barrier();
+    uint localIdx;
+    if(!useSWR)
     {
-        group_start = atomicAdd(numVertices.indexCount, local_size);
+        localIdx = atomicAdd(numVertices_hw.indexCount, totalVertices);
     }
-    barrier();
+    else
+    {
+        localIdx = atomicAdd(numVertices_sw.indexCount, totalVertices);
+    }
 
     if(!culled)
     {
         for(uint i = 0; i < totalVertices / 3; i++)
         {
             uint inIdx = indata[index].triangleStart * 3 + 3 * i;
-            uint outIdx = group_start + localIdx + 3 * i;
-            outTriangles[outIdx + 0] = inTriangles[inIdx + 0];
-            outTriangles[outIdx + 1] = inTriangles[inIdx + 1];
-            outTriangles[outIdx + 2] = inTriangles[inIdx + 2];
-            outObjectIds[outIdx + 0] = currCluster.objectId;
-            outObjectIds[outIdx + 1] = currCluster.objectId;
-            outObjectIds[outIdx + 2] = currCluster.objectId;
+            //uint outIdx = group_start_hw + localIdx + 3 * i;
+            uint outIdx = localIdx + 3 * i;
+            if(!useSWR)
+            {
+                outTriangles_hw[outIdx + 0] = inTriangles[inIdx + 0];
+                outTriangles_hw[outIdx + 1] = inTriangles[inIdx + 1];
+                outTriangles_hw[outIdx + 2] = inTriangles[inIdx + 2];
+                outIds_hw[outIdx/3] = uvec3(currCluster.objectId,index,i);
+            }
+            else
+            {
+                outTriangles_sw[outIdx + 0] = inTriangles[inIdx + 0];
+                outTriangles_sw[outIdx + 1] = inTriangles[inIdx + 1];
+                outTriangles_sw[outIdx + 2] = inTriangles[inIdx + 2];
+                outIds_sw[outIdx/3] = uvec3(currCluster.objectId,index,i);
+            }
             //int s = int(currCluster.objectId == 0) * 2 - 1;
             //outObjectIds[outIdx + 0] = s * int(inTriangles[inIdx + 0]);
             //outObjectIds[outIdx + 1] = s * int(inTriangles[inIdx + 1]);

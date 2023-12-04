@@ -51,6 +51,7 @@ float getScreenBoundRadiusSq(vec3 center, float R)
 
 void main()
 {
+    //TODO: get a better error estimation
     uint index = gl_GlobalInvocationID.x;
     if(index >= pcs.numClusters) return;
     ErrorInfo error = idata[index];

@@ -3,16 +3,16 @@
 #define WORKGROUP_SIZE 8
 layout(local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1) in;
 
-layout(set = 0, binding = 0) uniform sampler2D iImage;
+layout(set = 0, binding = 0, r32f) uniform image2D iImage;
 layout(set = 0, binding = 1, r32f) uniform image2D oImage;
 
 
 void main()
 {
     ivec2 index = ivec2(gl_GlobalInvocationID.xy);
-    vec2 inputSize = textureSize(iImage, 0).xy;
+    vec2 inputSize = imageSize(iImage).xy;
     uvec2 outputSize = imageSize(oImage).xy;
     if(index.x>=outputSize.x || index.y>=outputSize.y) return;
-    vec4 color = texture(iImage, index/inputSize);
+    vec4 color = imageLoad(iImage, index);
     imageStore(oImage, index, color);
 }

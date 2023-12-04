@@ -29,23 +29,111 @@ layout(set = 0, binding = 2) buffer readonly ModelMatIn{
 };
 
 layout(set = 0, binding = 3) buffer readonly ObjectIdIn{
-	uint objectIds[];
+	uvec3 inID[ ]; //objectID,clusterID,triangleID
 };
 
-layout(set = 0, binding = 4) uniform UBO{
+layout(set = 0, binding = 4) uniform DrawInfo{
 	uint num_triangles;
-}ubo;
+}drawInfo;
 
+layout(set = 0, binding = 5, r64i) uniform i64image2D swrImage;
 
-layout(set = 0, binding = 5, r64ui) uniform uimage2D swrImage;
+layout (set = 0, binding = 6) uniform UBO 
+{
+	mat4 proj;
+	mat4 model;
+	mat4 view;
+	vec3 camPos;
+} ubo;
 
+int64_t packPixel(float depth, uint clusterID, uint triangleID)
+{
+	int64_t ans = 0x8000000000000000L;
+	ans |= ((int64_t(floatBitsToInt(depth)))<<32);
+	ans |= ((int64_t(clusterID&0xFFFFFF))<<8);
+	ans |= int64_t(triangleID&0xFF);
+	return ans;
+}
 
+bool insideOnePixel(vec2 v0, vec2 v1, vec2 v2)
+{
+	return (floor(v0.x)==floor(v1.x))&&(floor(v1.x)==floor(v2.x))&&(floor(v0.y)==floor(v1.y))&&(floor(v1.y)==floor(v2.y));
+}
+
+void updatePixel(ivec2 screenSize, ivec2 pos, int64_t val)
+{
+	if(pos.x<0||pos.x>=screenSize.x||pos.y<0||pos.y>=screenSize.y) return;
+	imageAtomicMax(swrImage,pos,val);
+}
+
+void rasterize(mat4 model, vec3 pos0, vec3 pos1, vec3 pos2, uint clusterID, uint triangleID)
+{
+	vec4 pos0H = ubo.proj*ubo.view*model*vec4(pos0,1.0);
+	vec4 pos1H = ubo.proj*ubo.view*model*vec4(pos1,1.0);
+	vec4 pos2H = ubo.proj*ubo.view*model*vec4(pos2,1.0);
+	pos0H.xyz/=pos0H.w;
+	pos1H.xyz/=pos1H.w;
+	pos2H.xyz/=pos2H.w;
+	pos0H.xy=pos0H.xy*0.5+0.5;
+	pos1H.xy=pos1H.xy*0.5+0.5;
+	pos2H.xy=pos2H.xy*0.5+0.5;
+	float z0=pos0H.z;
+	float z1=pos1H.z;
+	float z2=pos2H.z;
+	ivec2 screenSize=imageSize(swrImage);
+	vec2 v0=pos0H.xy*screenSize;
+	vec2 v1=pos1H.xy*screenSize;
+	vec2 v2=pos2H.xy*screenSize;
+	if(insideOnePixel(v0,v1,v2)) updatePixel(screenSize,ivec2(v0),packPixel(z0,clusterID,triangleID));
+	vec2 maxPixel = max(max(ceil(v0),ceil(v1)),max(ceil(v0),ceil(v2)));
+	vec2 minPixel = min(min(floor(v0),floor(v1)),min(floor(v0),floor(v2)));
+
+	vec2 edge01=vec2(v1.y-v0.y, v0.x-v1.x);
+	vec2 edge12=vec2(v2.y-v1.y, v1.x-v2.x);
+	vec2 edge20=vec2(v0.y-v2.y, v2.x-v0.x);
+
+	float dzdx=((z1-z0)*(v2.y-v0.y)-(z2-z0)*(v1.y-v0.y))/((v1.x-v0.x)*(v2.y-v0.y)-(v2.x-v0.x)*(v1.y-v0.y));
+	float dzdy=((z2-z0)*(v1.x-v0.x)-(z1-z0)*(v2.x-v0.x))/((v1.x-v0.x)*(v2.y-v0.y)-(v2.x-v0.x)*(v1.y-v0.y));
+	vec2 gradZ=vec2(dzdx, dzdy);
+
+	vec2 startPixel = minPixel+vec2(0.5);
+	float CY0=(startPixel.x-v0.x)*edge01.x+(startPixel.y-v0.y)*edge01.y;
+	float CY1=(startPixel.x-v1.x)*edge12.x+(startPixel.y-v1.y)*edge12.y;
+	float CY2=(startPixel.x-v2.x)*edge20.x+(startPixel.y-v2.y)*edge20.y;
+	float ZY=z0+(startPixel.x-v0.x)*gradZ.x+(startPixel.y-v0.y)*gradZ.y;
+	for(float y=startPixel.y;y<maxPixel.y;y+=1)
+	{
+		float CX0=CY0;
+		float CX1=CY1;
+		float CX2=CY2;
+		float ZX=ZY; 
+		for(float x=startPixel.x;x<maxPixel.x;x+=1)
+		{
+			if(CX0>=0&&CX1>=0&&CX2>=0) updatePixel(screenSize,ivec2(x,y),packPixel(ZX,clusterID,triangleID));
+			CX0+=edge01.x;
+			CX1+=edge12.x;
+			CX2+=edge20.x;
+			ZX+=gradZ.x;
+		}
+		CY0+=edge01.y;
+		CY1+=edge12.y;
+		CY2+=edge20.y;
+		ZY+=gradZ.y;
+	}
+}
 
 void main()
 {
 	uint index = gl_GlobalInvocationID.x;
     
-    if(index >= ubo.num_triangles) return;
+    if(index >= drawInfo.num_triangles) return;
+	uint v0i = inTriangles[index*3];
+	uint v1i = inTriangles[index*3+1];
+	uint v2i = inTriangles[index*3+2];
+	vec3 pos0 = inVertices[v0i].pos;
+	vec3 pos1 = inVertices[v1i].pos;
+	vec3 pos2 = inVertices[v2i].pos;
 
-
+	uvec3 currID = inID[index];
+	rasterize(inModelMats[currID.x],pos0,pos1,pos2,currID.y,currID.z);
 }

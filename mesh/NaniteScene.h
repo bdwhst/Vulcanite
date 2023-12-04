@@ -16,6 +16,7 @@ public:
 	vkglTF::Model::Indices indices;
 
 	uint32_t sceneIndicesCount = 0;
+	uint32_t visibleIndicesCount = 0;
 
 	std::vector<ClusterInfo> clusterInfo;
 	std::vector<ErrorInfo> errorInfo;

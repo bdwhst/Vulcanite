@@ -45,7 +45,7 @@ void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue tra
     // Create device local buffers
     // Vertex buffer
     VK_CHECK_RESULT(device->createBuffer(
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         vertexBufferSize,
         &vertices.buffer,
@@ -120,5 +120,6 @@ void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transfer
         }
         errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
         sceneIndicesCount += indexCounts[referenceMeshIndex];
+        visibleIndicesCount += naniteObject.referenceMesh->meshes[0].triangleVertexIndicesSortedByClusterIdx.size();
     }
 }

@@ -40,6 +40,40 @@ public:
 		vks::Texture2D hizbuffer;
 	} textures;
 
+
+	struct {
+		VkImage image;
+		VkDeviceMemory mem;
+		VkImageView view;
+		VkSampler sampler;
+	} HWRZBuffer;
+
+	struct {
+		VkImage image;
+		VkDeviceMemory mem;
+		VkImageView view;
+	} HWRVisBuffer;
+
+	struct {
+		VkImage image;
+		VkDeviceMemory mem;
+		VkImageView view;
+	} SWRBuffer;
+
+	VkFramebuffer HWRFramebuffer;
+
+	struct {
+		VkImage image;
+		VkDeviceMemory mem;
+		VkImageView view;
+	} FinalZBuffer;
+
+	struct {
+		VkImage image;
+		VkDeviceMemory mem;
+		VkImageView view;
+	} FinalVisBuffer;
+
 	std::vector<VkImageView> hizImageViews;
 
 	VkPipelineLayout hizComputePipelineLayout;
@@ -56,6 +90,21 @@ public:
 
 	VkPipelineLayout errorProjPipelineLayout;
 	VkPipeline errorProjPipeline;
+
+	VkPipelineLayout shadingPipelineLayout;
+	VkPipeline shadingPipeline;
+
+	VkPipelineLayout hwrastPipelineLayout;
+	VkPipeline hwrastPipeline;
+
+	VkPipelineLayout swrComputePipelineLayout;
+	VkPipeline swrComputePipeline;
+
+	VkPipelineLayout mergeRastPipelineLayout;
+	VkPipeline mergeRastPipeline;
+
+	VkPipelineLayout clearImagePipelineLayout;
+	VkPipeline clearImagePipeline;
 
 	VkSampler depthStencilSampler;
 
@@ -84,6 +133,7 @@ public:
 		vks::Buffer topCube;
 		vks::Buffer params;
 		vks::Buffer modelMats;
+		vks::Buffer shadingMats;
 	} uniformBuffers;
 
 	struct UBOMatrices {
@@ -92,6 +142,12 @@ public:
 		glm::mat4 view;
 		glm::vec3 camPos;
 	} uboMatrices1, uboMatrices2, uboMatrices3, uboMatrices4;
+
+	struct UBOShading {
+		glm::mat4 invView;
+		glm::mat4 invProj;
+		glm::vec3 camPos;
+	} uboshading;
 
 	struct ModelMatrices {
 		glm::mat4 model;
@@ -155,12 +211,18 @@ public:
 		int vis_clusters;
 	} renderingPushConstants;
 
-	vks::Buffer culledIndicesBuffer;
-	vks::Buffer culledObjectIndicesBuffer;
+	vks::Buffer HWRIndicesBuffer;
+	//vks::Buffer culledObjectIndicesBuffer;
+	vks::Buffer HWRIDBuffer;
+	vks::Buffer SWRIndicesBuffer;
+	vks::Buffer SWRIDBuffer;
+
 	vks::Buffer modelMatsBuffer;
 	vks::Buffer clustersInfoBuffer;
 	vks::Buffer cullingUniformBuffer;
 	vks::Buffer drawIndexedIndirectBuffer;
+
+	vks::Buffer swrNumVerticesBuffer;
 
 	struct ErrorPushConstants {
 		alignas(4) int numClusters;
@@ -174,6 +236,9 @@ public:
 	VkPipelineLayout pipelineLayout;
 
 	VkRenderPass topViewRenderPass;
+	VkRenderPass hwRastRenderPass;
+
+	VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT imageAtomicInt64Feature{};
 
 	int vis_clusters_level = 0;
 	int topViewWidth = width / 5, topViewHeight = height / 5;
@@ -234,6 +299,12 @@ public:
 		if (deviceFeatures.shaderInt64) {
 			enabledFeatures.shaderInt64 = VK_TRUE;
 		}
+		if (deviceFeatures.tessellationShader) {
+			enabledFeatures.tessellationShader = VK_TRUE;
+		}
+		if (deviceFeatures.fragmentStoresAndAtomics) {
+			enabledFeatures.fragmentStoresAndAtomics = VK_TRUE;
+		}
 	}
 
 	virtual void getEnabledInstanceExtensions()
@@ -244,6 +315,11 @@ public:
 	virtual void getEnabledDeviceExtensions()
 	{
 		enabledDeviceExtensions.emplace_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
+		enabledDeviceExtensions.emplace_back(VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME);
+		
+		imageAtomicInt64Feature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT;
+		imageAtomicInt64Feature.shaderImageInt64Atomics = VK_TRUE;
+		deviceCreatepNextChain = &imageAtomicInt64Feature;
 	}
 
 	void buildCommandBuffers()
@@ -283,6 +359,11 @@ public:
 
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
+			/*
+			*
+			*  Screen space Error compute
+			*
+			*/
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, errorProjPipeline);
 			errorPushConstants.numClusters = clusterinfos.size();
 			errorPushConstants.screenSize = glm::vec2(width, height);
@@ -314,6 +395,12 @@ public:
 			imageMemBarrier.subresourceRange.layerCount = 1;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
+
+			/*
+			*
+			*  Culling
+			*
+			*/
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
 			cullingPushConstants.threshold = thresholdInt / thresholdIntDiv;
@@ -350,7 +437,7 @@ public:
 			bufferBarrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.buffer = culledIndicesBuffer.buffer;
+			bufferBarrier.buffer = HWRIndicesBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
@@ -359,21 +446,222 @@ public:
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.buffer = culledObjectIndicesBuffer.buffer;
+			bufferBarrier.buffer = HWRIDBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
-			
-			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
+
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = swrNumVerticesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = SWRIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = SWRIDBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			/*
+			*
+			*  Software Rasterize
+			*
+			*/
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipeline);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipelineLayout, 0, 1, &descManager->getSet("clearImage", 0), 0, 0);
+			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+
+			imageMemBarrier.image = SWRBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipeline);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipelineLayout, 0, 1, &descManager->getSet("swRast", 0), 0, 0);
+			vkCmdDispatch(drawCmdBuffers[i], (scene.visibleIndicesCount / 3 + 31) / 32, 1, 1);
+
+			imageMemBarrier.image = SWRBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+
+			/*
+			* 
+			*  Hardware Rasterize
+			* 
+			*/
 			VkViewport viewport = vks::initializers::viewport((float)width, (float)height, 0.0f, 1.0f);
-			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-
 			VkRect2D scissor = vks::initializers::rect2D(width, height, 0, 0);
+			VkClearValue clearValues1[2] = {};
+			clearValues1[0].color.uint32[0] = UINT32_MAX;
+			clearValues1[0].color.uint32[1] = UINT32_MAX;
+			clearValues1[0].color.uint32[2] = UINT32_MAX;
+			clearValues1[0].color.uint32[3] = UINT32_MAX;
+			clearValues1[1].depthStencil = { 1.0f, 0 };
+			VkRenderPassBeginInfo renderPassBeginInfo1 = vks::initializers::renderPassBeginInfo();
+			renderPassBeginInfo1.framebuffer = HWRFramebuffer;
+			renderPassBeginInfo1.renderPass = hwRastRenderPass;
+			renderPassBeginInfo1.renderArea.offset.x = 0;
+			renderPassBeginInfo1.renderArea.offset.y = 0;
+			renderPassBeginInfo1.renderArea.extent.width = width;
+			renderPassBeginInfo1.renderArea.extent.height = height;
+			renderPassBeginInfo1.clearValueCount = 2;
+			renderPassBeginInfo1.pClearValues = clearValues1;
+			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo1, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, hwrastPipeline);
+			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
 			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, hwrastPipelineLayout, 0, 1, &descManager->getSet("hwRast", 0), 0, NULL);
+			vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			VkDeviceSize offsets[1] = { 0 };
+			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
+			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
+			bufferBarrier.srcAccessMask = VK_ACCESS_INDEX_READ_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = HWRIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = HWRIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			imageMemBarrier.image = HWRZBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			imageMemBarrier.image = HWRVisBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			/*
+			*
+			*  Merge Rasterize results
+			*
+			*/
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipeline);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipelineLayout, 0, 1, &descManager->getSet("mergeRast", 0), 0, NULL);
+			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+
+			imageMemBarrier.image = HWRZBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			imageMemBarrier.image = HWRVisBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+
+			imageMemBarrier.image = FinalZBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			imageMemBarrier.image = FinalVisBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			
+
+			/*
+			*
+			*  Shading
+			*
+			*/
+			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
+			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
 			// Skybox
 			if (displaySkybox)
 			{
@@ -383,26 +671,30 @@ public:
 				models.skybox.draw(drawCmdBuffers[i]);
 			}
 
+			
+			// Objects shading
+			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipeline);
+			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipelineLayout, 0, 1, &descManager->getSet("shading", 0), 0, 0);
+			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 
 			// Objects
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 0), 0, NULL);
-			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 10), 0, NULL);
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
-			//models.object.draw(drawCmdBuffers[i]);
+			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 0), 0, NULL);
+			////vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 10), 0, NULL);
+			//vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+			////models.object.draw(drawCmdBuffers[i]);
 
-			//TODO: support multiple primitives in a model
-			if (renderingPushConstants.vis_clusters != 2)
-			{
-				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-				//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
-			}
-			else
-			{
-				naniteMesh.meshes[vis_clusters_level].draw(drawCmdBuffers[i], 0, nullptr, 1);
-			}
+			//if (renderingPushConstants.vis_clusters != 2)
+			//{
+			//	vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
+			//	vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			//	//vkCmdBindIndexBuffer(drawCmdBuffers[i], instance1.indices.buffer, 0, VK_INDEX_TYPE_UINT32);
+			//	vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+			//	vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			//}
+			//else
+			//{
+			//	naniteMesh.meshes[vis_clusters_level].draw(drawCmdBuffers[i], 0, nullptr, 1);
+			//}
 
 			/*vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);*/
@@ -415,8 +707,34 @@ public:
 			drawUI(drawCmdBuffers[i]);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
+			imageMemBarrier.image = FinalZBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			imageMemBarrier.image = FinalVisBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
 			/*
-			*	Depth copy
+			*
+			*  Depth copy
+			*
 			*/
 			std::vector<VkImageMemoryBarrier> imageMemBarriers(1);
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
@@ -452,7 +770,9 @@ public:
 
 
 			/*
-			*	TOP VIEW
+			*
+			*  Top view
+			*
 			*/
 
 			if(vis_topView)
@@ -478,7 +798,7 @@ public:
 				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
 				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-				vkCmdBindIndexBuffer(drawCmdBuffers[i], culledIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
@@ -486,10 +806,6 @@ public:
 				models.cube.draw(drawCmdBuffers[i]);
 				vkCmdEndRenderPass(drawCmdBuffers[i]);
 			}
-
-
-			
-
 
 			/*
 			*  HZB build
@@ -557,6 +873,7 @@ public:
 
 			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
 		}
+		//ASSERT(false, "debug interrupt");
 	}
 
 	void loadAssets()
@@ -577,18 +894,18 @@ public:
 			naniteMesh.meshes[i].initVertexBuffer();
 			naniteMesh.meshes[i].createVertexBuffer(vulkanDevice, queue);
 		}
-		scene.naniteMeshes.push_back(naniteMesh);
+		scene.naniteMeshes.emplace_back(naniteMesh);
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -7; i <= 7; i++)
+		for (int i = -1; i <= 0; i++)
 		{
-			for (int j = -7; j <= 7; j++) 
+			for (int j = -1; j <= 0; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
 				auto& instance = Instance(&naniteMesh, modelMat);
-				modelMats.push_back(modelMat);
-				scene.naniteObjects.push_back(instance);
+				modelMats.emplace_back(modelMat);
+				scene.naniteObjects.emplace_back(instance);
 		
 			}
 		}
@@ -661,7 +978,7 @@ public:
 		manager->addSetLayout("debugQuad", setLayoutBindings, 1);
 
 		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1)
 		};
 		manager->addSetLayout("depthCopy", setLayoutBindings, 1);
@@ -675,6 +992,9 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 7),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 8),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 9),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 10),
 		};
 		manager->addSetLayout("culling", setLayoutBindings, 1);
 
@@ -685,9 +1005,57 @@ public:
 		};
 		manager->addSetLayout("errorProj", setLayoutBindings, 1);
 
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 2),
+		};
+		manager->addSetLayout("hwRast", setLayoutBindings, 1);
+
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 5),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
+		};
+		manager->addSetLayout("swRast", setLayoutBindings, 1);
+
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+		};
+		manager->addSetLayout("clearImage", setLayoutBindings, 1);
+
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 4),
+		};
+		manager->addSetLayout("mergeRast", setLayoutBindings, 1);
+
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT, 4),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT, 5),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 6),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT, 7),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 8),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 9),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 10),
+		};
+		manager->addSetLayout("shading", setLayoutBindings, 1);
+
 		manager->createLayoutsAndSets(device);
 
-		culledObjectIndicesBuffer.setupDescriptor();
+
+		//culledObjectIndicesBuffer.setupDescriptor();
 		modelMatsBuffer.setupDescriptor();
 
 		//Object camera view
@@ -701,7 +1069,7 @@ public:
 		manager->writeToSet("objectDraw", 0, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 0, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 0, 9, &textures.roughnessMap.descriptor);
-		manager->writeToSet("objectDraw", 0, 10, &culledObjectIndicesBuffer.descriptor);
+		//manager->writeToSet("objectDraw", 0, 10, &culledObjectIndicesBuffer.descriptor);
 		manager->writeToSet("objectDraw", 0, 11, &modelMatsBuffer.descriptor);
 
 
@@ -716,7 +1084,7 @@ public:
 		manager->writeToSet("objectDraw", 1, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 1, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 1, 9, &textures.roughnessMap.descriptor);
-		manager->writeToSet("objectDraw", 1, 10, &culledObjectIndicesBuffer.descriptor);
+		//manager->writeToSet("objectDraw", 1, 10, &culledObjectIndicesBuffer.descriptor);
 		manager->writeToSet("objectDraw", 1, 11, &modelMatsBuffer.descriptor);
 
 		//Cube camera view
@@ -730,7 +1098,7 @@ public:
 		manager->writeToSet("objectDraw", 2, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 2, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 2, 9, &textures.roughnessMap.descriptor);
-		manager->writeToSet("objectDraw", 2, 10, &culledObjectIndicesBuffer.descriptor);
+		//manager->writeToSet("objectDraw", 2, 10, &culledObjectIndicesBuffer.descriptor);
 		manager->writeToSet("objectDraw", 2, 11, &modelMatsBuffer.descriptor);
 		//Cube top view
 		manager->writeToSet("objectDraw", 3, 0, &uniformBuffers.topCube.descriptor);
@@ -743,7 +1111,7 @@ public:
 		manager->writeToSet("objectDraw", 3, 7, &textures.aoMap.descriptor);
 		manager->writeToSet("objectDraw", 3, 8, &textures.metallicMap.descriptor);
 		manager->writeToSet("objectDraw", 3, 9, &textures.roughnessMap.descriptor);
-		manager->writeToSet("objectDraw", 3, 10, &culledObjectIndicesBuffer.descriptor);
+		//manager->writeToSet("objectDraw", 3, 10, &culledObjectIndicesBuffer.descriptor);
 		manager->writeToSet("objectDraw", 3, 11, &modelMatsBuffer.descriptor);
 
 		//Skybox camera view
@@ -774,9 +1142,8 @@ public:
 
 		//Depth copy
 		VkDescriptorImageInfo depthImageInfo = {};
-		depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		depthImageInfo.imageView = depthStencil.view;
-		depthImageInfo.sampler = depthStencilSampler;
+		depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		depthImageInfo.imageView = FinalZBuffer.view;
 		VkDescriptorImageInfo outputImageInfo = {};
 		outputImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		outputImageInfo.imageView = hizImageViews[0];
@@ -785,22 +1152,30 @@ public:
 
 		//Culling
 		clustersInfoBuffer.setupDescriptor();
-		culledIndicesBuffer.setupDescriptor();
+		HWRIndicesBuffer.setupDescriptor();
+		HWRIDBuffer.setupDescriptor();
 		drawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		projectedErrorBuffer.setupDescriptor();
-		culledObjectIndicesBuffer.setupDescriptor();
+		SWRIndicesBuffer.setupDescriptor();
+		SWRIDBuffer.setupDescriptor();
+		swrNumVerticesBuffer.setupDescriptor();
+
+		//culledObjectIndicesBuffer.setupDescriptor();
 		VkDescriptorBufferInfo inputIndicesInfo{};
 		inputIndicesInfo.buffer = scene.indices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
 		manager->writeToSet("culling", 0, 0, &clustersInfoBuffer.descriptor);
 		manager->writeToSet("culling", 0, 1, &inputIndicesInfo);
-		manager->writeToSet("culling", 0, 2, &culledIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 2, &HWRIndicesBuffer.descriptor);
 		manager->writeToSet("culling", 0, 3, &drawIndexedIndirectBuffer.descriptor);
 		manager->writeToSet("culling", 0, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
-		manager->writeToSet("culling", 0, 7, &culledObjectIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 7, &HWRIDBuffer.descriptor);
+		manager->writeToSet("culling", 0, 8, &SWRIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 9, &SWRIDBuffer.descriptor);
+		manager->writeToSet("culling", 0, 10, &swrNumVerticesBuffer.descriptor);
 
 		//Error projection
 		errorInfoBuffer.setupDescriptor();
@@ -810,6 +1185,72 @@ public:
 		manager->writeToSet("errorProj", 0, 1, &projectedErrorBuffer.descriptor);
 		manager->writeToSet("errorProj", 0, 2, &errorUniformBuffer.descriptor);
 
+		//Hardware Rasterization
+		manager->writeToSet("hwRast", 0, 0, &modelMatsBuffer.descriptor);
+		manager->writeToSet("hwRast", 0, 1, &HWRIDBuffer.descriptor);
+		manager->writeToSet("hwRast", 0, 2, &uniformBuffers.object.descriptor);
+
+		//Software Rasterization
+		VkDescriptorBufferInfo inputVertInfo{};
+		inputVertInfo.buffer = scene.vertices.buffer;
+		inputVertInfo.range = VK_WHOLE_SIZE;
+		VkDescriptorImageInfo SWRImageInfo = {};
+		SWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		SWRImageInfo.imageView = SWRBuffer.view;
+		manager->writeToSet("swRast", 0, 0, &inputVertInfo);
+		manager->writeToSet("swRast", 0, 1, &SWRIndicesBuffer.descriptor);
+		manager->writeToSet("swRast", 0, 2, &modelMatsBuffer.descriptor);
+		manager->writeToSet("swRast", 0, 3, &SWRIDBuffer.descriptor);
+		manager->writeToSet("swRast", 0, 4, &swrNumVerticesBuffer.descriptor);
+		manager->writeToSet("swRast", 0, 5, &SWRImageInfo);
+		manager->writeToSet("swRast", 0, 6, &uniformBuffers.object.descriptor);
+
+		//Clear image
+		manager->writeToSet("clearImage", 0, 0, &SWRImageInfo);
+
+		//Merge Rasterization Result
+		VkDescriptorImageInfo HWRImageInfo = {};
+		HWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		HWRImageInfo.imageView = HWRZBuffer.view;
+		HWRImageInfo.sampler = HWRZBuffer.sampler;
+		manager->writeToSet("mergeRast", 0, 0, &HWRImageInfo);
+		HWRImageInfo.sampler = 0;
+		HWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		HWRImageInfo.imageView = HWRVisBuffer.view;
+		manager->writeToSet("mergeRast", 0, 1, &HWRImageInfo);
+		manager->writeToSet("mergeRast", 0, 2, &SWRImageInfo);
+		HWRImageInfo.sampler = 0;
+		HWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		HWRImageInfo.imageView = FinalZBuffer.view;
+		manager->writeToSet("mergeRast", 0, 3, &HWRImageInfo);
+		HWRImageInfo.sampler = 0;
+		HWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		HWRImageInfo.imageView = FinalVisBuffer.view;
+		manager->writeToSet("mergeRast", 0, 4, &HWRImageInfo);
+
+
+		//Shading
+		manager->writeToSet("shading", 0, 0, &clustersInfoBuffer.descriptor);
+		
+		manager->writeToSet("shading", 0, 1, &inputVertInfo);
+		manager->writeToSet("shading", 0, 2, &inputIndicesInfo);
+		manager->writeToSet("shading", 0, 3, &modelMatsBuffer.descriptor);
+		HWRImageInfo.sampler = 0;
+		HWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		HWRImageInfo.imageView = FinalVisBuffer.view;
+		manager->writeToSet("shading", 0, 4, &HWRImageInfo);
+		HWRImageInfo.sampler = 0;
+		HWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		HWRImageInfo.imageView = FinalZBuffer.view;
+		manager->writeToSet("shading", 0, 5, &HWRImageInfo);
+		uniformBuffers.shadingMats.setupDescriptor();
+		manager->writeToSet("shading", 0, 6, &uniformBuffers.shadingMats.descriptor);
+		manager->writeToSet("shading", 0, 7, &uniformBuffers.params.descriptor);
+		manager->writeToSet("shading", 0, 8, &textures.irradianceCube.descriptor);
+		manager->writeToSet("shading", 0, 9, &textures.lutBrdf.descriptor);
+		manager->writeToSet("shading", 0, 10, &textures.prefilteredCube.descriptor);
+
+		//ASSERT(false, "debug");
 	}
 
 	void preparePipelines()
@@ -883,7 +1324,32 @@ public:
 			// Top view pipeline
 			rasterizationState.cullMode = VK_CULL_MODE_NONE;
 			pipelineCI.renderPass = topViewRenderPass;
+			pipelineCI.layout = pipelineLayout;
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &pipelines.topView));
+		}
+
+		{
+			// Hardware Rasterize pipeline
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("hwRast"), 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &hwrastPipelineLayout));
+			pipelineCI.layout = hwrastPipelineLayout;
+			pipelineCI.renderPass = hwRastRenderPass;
+			std::array<VkPipelineShaderStageCreateInfo, 4> shaderStages1;
+			shaderStages1[0] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+			shaderStages1[1] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			shaderStages1[2] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.tesc.spv", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
+			shaderStages1[3] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.tese.spv", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+			pipelineCI.pStages = shaderStages1.data();
+			pipelineCI.stageCount = 4;
+			rasterizationState.cullMode = VK_CULL_MODE_NONE;
+			VkPipelineTessellationStateCreateInfo tessellationState = {};
+			tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+			tessellationState.patchControlPoints = 3; // Number of control points per patch
+			pipelineCI.pTessellationState = &tessellationState;
+			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &hwrastPipeline));
+			pipelineCI.pTessellationState = nullptr;
+			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		}
 
 		{
@@ -891,6 +1357,7 @@ public:
 			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("debugQuad"), 1);
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &debugQuadPipelineLayout));
 			pipelineCI.layout = debugQuadPipelineLayout;
+			pipelineCI.renderPass = renderPass;
 			depthStencilState.depthWriteEnable = VK_FALSE;
 			depthStencilState.depthTestEnable = VK_FALSE;
 			VkPipelineVertexInputStateCreateInfo vertexInputStateCI = {};
@@ -903,7 +1370,19 @@ public:
 			rasterizationState.cullMode = VK_CULL_MODE_NONE;
 			shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/debugquad.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 			shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/debugquad.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			pipelineCI.stageCount = 2;
+			pipelineCI.pStages = shaderStages.data();
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &debugQuadPipeline));
+		}
+
+		{
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("shading"), 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &shadingPipelineLayout));
+			pipelineCI.layout = shadingPipelineLayout;
+			pipelineCI.renderPass = renderPass;
+			shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/shading.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+			shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/shading.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingPipeline));
 		}
 
 		{
@@ -918,6 +1397,34 @@ public:
 			pipelineCreateInfo.stage = computeShaderStage;
 			pipelineCreateInfo.layout = hizComputePipelineLayout;
 			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &hizComputePipeline));
+		}
+
+		{
+			// Clear image pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/clearimage.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("clearImage"), 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &clearImagePipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = clearImagePipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &clearImagePipeline));
+		}
+
+		{
+			// Software rasterize pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/swrasterize.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("swRast"), 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &swrComputePipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = swrComputePipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &swrComputePipeline));
 		}
 
 		{
@@ -969,6 +1476,20 @@ public:
 			pipelineCreateInfo.layout = errorProjPipelineLayout;
 			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &errorProjPipeline));
 		}
+
+		{
+			// Merge Rasterize result
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/merger.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("mergeRast"), 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &mergeRastPipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = mergeRastPipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &mergeRastPipeline));
+		}
+		//ASSERT(false, "debug");
 	}
 
 	// Generate a BRDF integration map used as a look-up-table (stores roughness / NdotV)
@@ -1939,17 +2460,33 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount / 2 * sizeof(uint32_t),
-			&culledIndicesBuffer.buffer,
-			&culledIndicesBuffer.memory,
+			scene.visibleIndicesCount * sizeof(uint32_t),
+			&HWRIndicesBuffer.buffer,
+			&HWRIndicesBuffer.memory,
 			nullptr));
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount / 2 * sizeof(uint16_t),
-			&culledObjectIndicesBuffer.buffer,
-			&culledObjectIndicesBuffer.memory,
+			scene.visibleIndicesCount / 3 * sizeof(glm::uvec3),
+			&HWRIDBuffer.buffer,
+			&HWRIDBuffer.memory,
+			nullptr));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.visibleIndicesCount * sizeof(uint32_t),
+			&SWRIndicesBuffer.buffer,
+			&SWRIndicesBuffer.memory,
+			nullptr));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.visibleIndicesCount / 3 * sizeof(glm::uvec3),
+			&SWRIDBuffer.buffer,
+			&SWRIDBuffer.memory,
 			nullptr));
 		
 		for (auto& ci:scene.clusterInfo)
@@ -2024,6 +2561,19 @@ public:
 
 		drawIndexedIndirectBuffer.device = device;
 		VK_CHECK_RESULT(drawIndexedIndirectBuffer.map());
+
+		uint32_t num_vertices = 0;
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			sizeof(uint32_t),
+			&swrNumVerticesBuffer.buffer,
+			&swrNumVerticesBuffer.memory,
+			&num_vertices));
+
+		swrNumVerticesBuffer.device = device;
+		VK_CHECK_RESULT(swrNumVerticesBuffer.map());
 	}
 
 	void createErrorProjectionBuffer()
@@ -2081,6 +2631,273 @@ public:
 			&uboErrorMatrices));
 		errorUniformBuffer.device = device;
 		VK_CHECK_RESULT(errorUniformBuffer.map());
+	}
+
+	void createRasterizeBuffer()
+	{
+		VkImageCreateInfo imageCI{};
+		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = VK_FORMAT_D32_SFLOAT;
+		imageCI.extent = { width, height, 1 };
+		imageCI.mipLevels = 1;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &HWRZBuffer.image));
+		VkMemoryRequirements memReqs{};
+		vkGetImageMemoryRequirements(device, HWRZBuffer.image, &memReqs);
+
+		VkMemoryAllocateInfo memAllloc{};
+		memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAllloc.allocationSize = memReqs.size;
+		memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &HWRZBuffer.mem));
+		VK_CHECK_RESULT(vkBindImageMemory(device, HWRZBuffer.image, HWRZBuffer.mem, 0));
+
+		VkImageViewCreateInfo imageViewCI{};
+		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCI.image = HWRZBuffer.image;
+		imageViewCI.format = VK_FORMAT_D32_SFLOAT;
+		imageViewCI.subresourceRange.baseMipLevel = 0;
+		imageViewCI.subresourceRange.levelCount = 1;
+		imageViewCI.subresourceRange.baseArrayLayer = 0;
+		imageViewCI.subresourceRange.layerCount = 1;
+		imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &HWRZBuffer.view));
+
+		VkSamplerCreateInfo samplerCI = vks::initializers::samplerCreateInfo();
+		samplerCI.magFilter = VK_FILTER_NEAREST;
+		samplerCI.minFilter = VK_FILTER_NEAREST;
+		samplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		samplerCI.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+		VK_CHECK_RESULT(vkCreateSampler(device, &samplerCI, nullptr, &HWRZBuffer.sampler));
+
+		VkCommandBuffer cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		VkImageSubresourceRange subresourceRange = {};
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		subresourceRange.levelCount = 1;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			HWRZBuffer.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+
+
+
+
+
+		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = VK_FORMAT_R32_UINT;
+		imageCI.extent = { width, height, 1 };
+		imageCI.mipLevels = 1;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &HWRVisBuffer.image));
+		vkGetImageMemoryRequirements(device, HWRVisBuffer.image, &memReqs);
+
+		memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAllloc.allocationSize = memReqs.size;
+		memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &HWRVisBuffer.mem));
+		VK_CHECK_RESULT(vkBindImageMemory(device, HWRVisBuffer.image, HWRVisBuffer.mem, 0));
+
+		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCI.image = HWRVisBuffer.image;
+		imageViewCI.format = VK_FORMAT_R32_UINT;
+		imageViewCI.subresourceRange.baseMipLevel = 0;
+		imageViewCI.subresourceRange.levelCount = 1;
+		imageViewCI.subresourceRange.baseArrayLayer = 0;
+		imageViewCI.subresourceRange.layerCount = 1;
+		imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &HWRVisBuffer.view));
+
+		cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		subresourceRange.levelCount = 1;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			HWRVisBuffer.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+
+
+		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = VK_FORMAT_R32_UINT;
+		imageCI.extent = { width, height, 1 };
+		imageCI.mipLevels = 1;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &FinalVisBuffer.image));
+		vkGetImageMemoryRequirements(device, FinalVisBuffer.image, &memReqs);
+
+		memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAllloc.allocationSize = memReqs.size;
+		memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &FinalVisBuffer.mem));
+		VK_CHECK_RESULT(vkBindImageMemory(device, FinalVisBuffer.image, FinalVisBuffer.mem, 0));
+
+		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCI.image = FinalVisBuffer.image;
+		imageViewCI.format = VK_FORMAT_R32_UINT;
+		imageViewCI.subresourceRange.baseMipLevel = 0;
+		imageViewCI.subresourceRange.levelCount = 1;
+		imageViewCI.subresourceRange.baseArrayLayer = 0;
+		imageViewCI.subresourceRange.layerCount = 1;
+		imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &FinalVisBuffer.view));
+
+		cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		subresourceRange.levelCount = 1;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			FinalVisBuffer.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_GENERAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+
+
+		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = VK_FORMAT_R32_SFLOAT;
+		imageCI.extent = { width, height, 1 };
+		imageCI.mipLevels = 1;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &FinalZBuffer.image));
+		vkGetImageMemoryRequirements(device, FinalZBuffer.image, &memReqs);
+
+		memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAllloc.allocationSize = memReqs.size;
+		memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &FinalZBuffer.mem));
+		VK_CHECK_RESULT(vkBindImageMemory(device, FinalZBuffer.image, FinalZBuffer.mem, 0));
+
+		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCI.image = FinalZBuffer.image;
+		imageViewCI.format = VK_FORMAT_R32_SFLOAT;
+		imageViewCI.subresourceRange.baseMipLevel = 0;
+		imageViewCI.subresourceRange.levelCount = 1;
+		imageViewCI.subresourceRange.baseArrayLayer = 0;
+		imageViewCI.subresourceRange.layerCount = 1;
+		imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &FinalZBuffer.view));
+
+		cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		subresourceRange.levelCount = 1;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			FinalZBuffer.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_GENERAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+
+
+
+		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageCI.imageType = VK_IMAGE_TYPE_2D;
+		imageCI.format = VK_FORMAT_R64_SINT;
+		imageCI.extent = { width, height, 1 };
+		imageCI.mipLevels = 1;
+		imageCI.arrayLayers = 1;
+		imageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+		imageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+		imageCI.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+
+		VK_CHECK_RESULT(vkCreateImage(device, &imageCI, nullptr, &SWRBuffer.image));
+		vkGetImageMemoryRequirements(device, SWRBuffer.image, &memReqs);
+
+		memAllloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		memAllloc.allocationSize = memReqs.size;
+		memAllloc.memoryTypeIndex = vulkanDevice->getMemoryType(memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VK_CHECK_RESULT(vkAllocateMemory(device, &memAllloc, nullptr, &SWRBuffer.mem));
+		VK_CHECK_RESULT(vkBindImageMemory(device, SWRBuffer.image, SWRBuffer.mem, 0));
+
+		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		imageViewCI.image = SWRBuffer.image;
+		imageViewCI.format = VK_FORMAT_R64_SINT;
+		imageViewCI.subresourceRange.baseMipLevel = 0;
+		imageViewCI.subresourceRange.levelCount = 1;
+		imageViewCI.subresourceRange.baseArrayLayer = 0;
+		imageViewCI.subresourceRange.layerCount = 1;
+		imageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		VK_CHECK_RESULT(vkCreateImageView(device, &imageViewCI, nullptr, &SWRBuffer.view));
+
+		cmdBuf = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+		subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		subresourceRange.levelCount = 1;
+		subresourceRange.layerCount = 1;
+
+		vks::tools::setImageLayout(
+			cmdBuf,
+			SWRBuffer.image,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_GENERAL,
+			subresourceRange);
+
+		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+
+
+
+
+
+		uboshading.invView = glm::inverse(camera.matrices.view);
+		uboshading.invProj = glm::inverse(camera.matrices.perspective);
+		uboshading.camPos = camera.position * -1.0f;
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+			sizeof(UBOShading),
+			&uniformBuffers.shadingMats.buffer,
+			&uniformBuffers.shadingMats.memory,
+			&uboshading));
+		uniformBuffers.shadingMats.device = device;
+		VK_CHECK_RESULT(uniformBuffers.shadingMats.map());
 	}
 
 	void createHiZBuffer()
@@ -2308,6 +3125,12 @@ public:
 		uboErrorMatrices.camUp = camera.getUp();
 		memcpy(errorUniformBuffer.mapped, &uboErrorMatrices, sizeof(UBOErrorMatrices));
 		errorUniformBuffer.flush();
+
+		uboshading.invView = glm::inverse(camera.matrices.view);
+		uboshading.invProj = glm::inverse(camera.matrices.perspective);
+		uboshading.camPos = camera.position * -1.0f;
+		memcpy(uniformBuffers.shadingMats.mapped, &uboshading, sizeof(UBOShading));
+		uniformBuffers.shadingMats.flush();
 	}
 
 	void updateParams()
@@ -2331,6 +3154,10 @@ public:
 			drawIndexedIndirect.indexCount = 0;
 			memcpy(drawIndexedIndirectBuffer.mapped, &drawIndexedIndirect, sizeof(DrawIndexedIndirect));
 			drawIndexedIndirectBuffer.flush();
+
+			uint32_t numVertices = 0;
+			memcpy(swrNumVerticesBuffer.mapped, &numVertices, sizeof(uint32_t));
+			swrNumVerticesBuffer.flush();
 			//vkDeviceWaitIdle(device);
 		}
 
@@ -2422,6 +3249,71 @@ public:
 		renderPassInfo.pDependencies = dependencies.data();
 
 		VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &topViewRenderPass));
+
+
+		// Color attachment
+		attachments[0].format = VK_FORMAT_R32_UINT;
+		attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		// Depth attachment
+		attachments[1].format = VK_FORMAT_D32_SFLOAT;
+		attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+		attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		colorReference.attachment = 0;
+		colorReference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		depthReference.attachment = 1;
+		depthReference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+		subpassDescription.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpassDescription.colorAttachmentCount = 1;
+		subpassDescription.pColorAttachments = &colorReference;
+		subpassDescription.pDepthStencilAttachment = &depthReference;
+		subpassDescription.inputAttachmentCount = 0;
+		subpassDescription.pInputAttachments = nullptr;
+		subpassDescription.preserveAttachmentCount = 0;
+		subpassDescription.pPreserveAttachments = nullptr;
+		subpassDescription.pResolveAttachments = nullptr;
+
+		// Subpass dependencies for layout transitions
+
+		dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[0].dstSubpass = 0;
+		dependencies[0].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		dependencies[0].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+		dependencies[0].dependencyFlags = 0;
+
+		dependencies[1].srcSubpass = VK_SUBPASS_EXTERNAL;
+		dependencies[1].dstSubpass = 0;
+		dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[1].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		dependencies[1].srcAccessMask = 0;
+		dependencies[1].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+		dependencies[1].dependencyFlags = 0;
+
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+		renderPassInfo.pAttachments = attachments.data();
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpassDescription;
+		renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+		renderPassInfo.pDependencies = dependencies.data();
+
+		VK_CHECK_RESULT(vkCreateRenderPass(device, &renderPassInfo, nullptr, &hwRastRenderPass));
+
 	}
 
 	void setupDepthStencil()
@@ -2490,18 +3382,42 @@ public:
 		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
 	}
 
+	void createHWRasterizeFramebuffer()
+	{
+		VkImageView attachments[2];
+
+		attachments[0] = HWRVisBuffer.view;
+		attachments[1] = HWRZBuffer.view;
+
+		VkFramebufferCreateInfo frameBufferCreateInfo = {};
+		frameBufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		frameBufferCreateInfo.pNext = NULL;
+		frameBufferCreateInfo.renderPass = hwRastRenderPass;
+		frameBufferCreateInfo.attachmentCount = 2;
+		frameBufferCreateInfo.pAttachments = attachments;
+		frameBufferCreateInfo.width = width;
+		frameBufferCreateInfo.height = height;
+		frameBufferCreateInfo.layers = 1;
+
+		
+		VK_CHECK_RESULT(vkCreateFramebuffer(vulkanDevice->logicalDevice, &frameBufferCreateInfo, nullptr, &HWRFramebuffer));
+	}
+
 	void prepare()
 	{
 		enabledDeviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
 		VulkanExampleBase::prepare();
+		createRasterizeBuffer();
 		loadAssets();
 		generateBRDFLUT();
 		generateIrradianceCube();
 		generatePrefilteredCube();
 		createCullingBuffers();
 		createErrorProjectionBuffer();
+		
 		createHiZBuffer();
 		createModelMatsBuffer();
+		createHWRasterizeFramebuffer();
 		prepareUniformBuffers();
 		setupDescriptors();
 		preparePipelines();

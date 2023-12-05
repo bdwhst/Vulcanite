@@ -32,6 +32,11 @@ TODO: Linux
 ![](images/performance.png)
 
 
+### Miletone Slides
+
+- [Milestone1 - GPU-Driven Depth Culling, Clustering & Grouping](https://docs.google.com/presentation/d/1KkI7cfCiym67k_yKQnZ-QDST0Q3UPPoxqMgxU9J9e30/edit?usp=sharing)
+- [Milestone2 - DAG, Serialization & Deserialization](https://docs.google.com/presentation/d/1YuY-mJDUGPB7RGOcJs3eZZ68J12EXOHgfcvojIDqEDI/edit?usp=sharing)
+- [Milestone3 - Mixed-mode Rasterizer, Multiple Instance, Performance Analysis](https://docs.google.com/presentation/d/1hUoOy5HGEKSDIVfERBmkov804C9v1XEtksona1Azle4/edit?usp=sharing)
 
 ---
 

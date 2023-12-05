@@ -4,6 +4,20 @@
 #include "glm/glm.hpp"
 #include "Cluster.h"
 
+//  Only store information that are useful for subsequent traversal
+//      aabb
+//      parent error
+//      children indices(glm::ivec4)
+//  Some meta information about bvh should also be stored (in a uniform buffer)
+//      Node count of each level (At least we should know the node count of level 0 to initiate traversal)
+struct BVHNodeInfo {
+    alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
+    alignas(16) glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
+    alignas(16) glm::ivec4 childrenNodeIndices;
+    alignas(CLUSTER_GROUP_MAX_SIZE * 4) int clusterIndices[CLUSTER_GROUP_MAX_SIZE]; // if clusterIndices[0] == -1, then this node is not a leaf node
+    alignas(8)  glm::vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
+};
+
 //ClusterInfo for drawing
 struct ClusterInfo {
     alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
@@ -237,7 +251,7 @@ struct Instance {
                 float worldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(cluster.boundingSphereRadius, 0, 0), 0.0));
                 //std::cout << cluster.triangleIndices.size() << std::endl;
                 //std::cout << cluster.boundingSphereRadius << " " << worldRadius << std::endl;
-                ASSERT(cluster.triangleIndices.size() <= CLUSTER_THRESHOLD, "cluster.triangleIndices.size() is over thresold");
+                ASSERT(cluster.triangleIndices.size() <= CLUSTER_MAX_SIZE, "cluster.triangleIndices.size() is over thresold");
                 ASSERT(cluster.boundingSphereRadius > 0 || cluster.triangleIndices.size() == 0, "boundingSphereRadius <= 0");
                 ASSERT(worldRadius > 0 || cluster.triangleIndices.size() == 0, "worldRadius <= 0");
                 errorInfo[j + currClusterNum].centerR = glm::vec4(worldCenter, worldRadius);
@@ -274,5 +288,47 @@ struct Instance {
 #endif // DEBUG_LOD_START
         }
 	}
+    std::shared_ptr<NaniteBVHNode> rootNode;
 
+    void reconstructBVH()
+    {
+        // Sadly, after several trials, the best implementation that I can think of would be
+        //      Re-construct BVH tree from flattened version.
+        //      For N instances, because we have N transforms, we need to build N BVH trees.
+        //      Then, in `NaniteScene`, we will create a virtual node that connects all the virtual nodes in every instances
+        //      and flatten the big whole BVH in `NaniteScene`
+
+        std::vector<std::shared_ptr<NaniteBVHNode>> flattenedBVHNodes(referenceMesh->flattenedBVHNodeInfos.size(), nullptr);
+        for (size_t i = 0; i < referenceMesh->flattenedBVHNodeInfos.size(); i++)
+        {
+            auto & nodeInfo = referenceMesh->flattenedBVHNodeInfos[i];
+            flattenedBVHNodes[i] = std::make_shared<NaniteBVHNode>();
+            flattenedBVHNodes[i]->depth = nodeInfo.depth;
+            flattenedBVHNodes[i]->parentNormalizedError = nodeInfo.parentNormalizedError;
+            flattenedBVHNodes[i]->normalizedlodError = nodeInfo.normalizedlodError;
+            // Apply transform
+            flattenedBVHNodes[i]->pMin = glm::vec3(rootTransform * glm::vec4(nodeInfo.pMin, 1.0f));
+            flattenedBVHNodes[i]->pMax = glm::vec3(rootTransform * glm::vec4(nodeInfo.pMax, 1.0f));
+            flattenedBVHNodes[i]->nodeStatus = nodeInfo.nodeStatus;
+            flattenedBVHNodes[i]->index = nodeInfo.index;
+            flattenedBVHNodes[i]->clusterIndices = nodeInfo.clusterIndices;
+            ASSERT(flattenedBVHNodes[i]->nodeStatus != INVALID, "Invalid nodes!");
+
+            //std::string indent(nodeInfo.depth, '\t');
+            //std::cout << indent << (flattenedBVHNodes[i]->nodeStatus == LEAF ? "Leaf " : "Non-leaf ")
+            //    << flattenedBVHNodes[i]->index << " "
+            //    << flattenedBVHNodes[i]->depth << " " << std::endl;
+        }
+
+        for (size_t i = 0; i < referenceMesh->flattenedBVHNodeInfos.size(); i++)
+        {
+            auto & nodeInfo = referenceMesh->flattenedBVHNodeInfos[i];
+            for (auto childIndex: nodeInfo.children)
+            {
+                flattenedBVHNodes[i]->children.push_back(flattenedBVHNodes[childIndex]);
+            }
+        }
+
+        rootNode = flattenedBVHNodes[0];
+    }
 };

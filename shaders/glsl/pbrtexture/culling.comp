@@ -209,12 +209,22 @@ void main()
 
     bool culled = false;
     Cluster currCluster = indata[index];
+
+    // TODO: BVH traverse
+    // First work group: Just processing the first level of BVH
+    // if pe(c_0) <= threshold, then c_0 and all its children should be culled.
+    // just return
+    // else if e(c_0) > thresholld we should enqueue its children into the global buffer
+    // else if pe(c_0) > threshold and e(c_0) <= threshold, we should just do the rest
+
+
     if(pcs.useFrustrumOcclusion==1)
     {
         culled = culled || frustrumCulling(currCluster);
         culled = culled || occlusionCulling(currCluster);
     }
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
+    //culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
     if(gl_LocalInvocationID.x==0)

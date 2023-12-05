@@ -81,6 +81,117 @@ void NaniteMesh::flattenDAG()
 	}
 }
 
+void NaniteMesh::flattenBVH()
+{
+	virtualBVHRootNode = std::make_shared<NaniteBVHNode>();
+	virtualBVHRootNode->nodeStatus = NaniteBVHNodeStatus::VIRTUAL_NODE;
+	for (const auto & mesh: meshes)
+	{
+		virtualBVHRootNode->children.push_back(mesh.rootBVHNode);
+	}
+
+	std::queue<std::shared_ptr<NaniteBVHNode>> nodeQueue;
+	nodeQueue.push(virtualBVHRootNode);
+
+	uint32_t index = 0;
+
+	std::vector<uint32_t> depthCounts;
+	uint32_t maxLevels = 0;
+	// Do a two-pass tree bfs
+	//      First pass update flattened index
+	//      Second pass update children index
+	while (!nodeQueue.empty())
+	{
+		auto currNode = nodeQueue.front();
+		currNode->index = index;
+		std::string indent(currNode->depth, '\t');
+		ASSERT(currNode->nodeStatus != NaniteBVHNodeStatus::INVALID, "Invalid node!");
+
+		std::cout << indent << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") << currNode->depth << " " << currNode->index << std::endl;
+		//ASSERT(currNode->depth <= depthCounts.size(), "currNode->level should never be greater than size of depthCounts, check traversal implementation");
+		if (currNode->depth == depthCounts.size())
+		{
+			depthCounts.push_back(1);
+		}
+		else
+		{
+			depthCounts[currNode->depth] += 1;
+		}
+		index++;
+		nodeQueue.pop();
+		if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
+		{
+			//std::cout << "Leaf node: " <<
+			//    "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+			//    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+			//    std::endl;
+		}
+		else
+		{
+			//std::cout << "Non-leaf node: "
+			//    "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+			//    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+			//    std::endl;
+			for (auto child : currNode->children)
+			{
+				std::cout << indent << child->depth << std::endl;
+				nodeQueue.push(child);
+			}
+		}
+	}
+	flattenedBVHNodeInfos.resize(index);  // `index` now is the size of nodes
+	//for (size_t i = 0; i < depthCounts.size(); i++)
+	//{
+	//    std::cout << "i " << i << " depthCounts[i]: " << depthCounts[i] << std::endl;
+	//}
+
+	nodeQueue.push(virtualBVHRootNode);
+	while (!nodeQueue.empty())
+	{
+
+		auto currNode = nodeQueue.front();
+		NaniteBVHNodeInfo nodeInfo;
+		//std::cout << currNode->children.size() << std::endl;
+		ASSERT(currNode->nodeStatus == VIRTUAL_NODE || currNode->children.size() <= 4, "size of non-virtual nodes' children should never be over 4");
+		nodeInfo.children.resize(currNode->children.size());
+		for (int i = 0; i < currNode->children.size(); ++i)
+		{
+			nodeInfo.children[i] = currNode->children[i]->index;
+		}
+		nodeInfo.pMax = currNode->pMax;
+		nodeInfo.pMin = currNode->pMin;
+		nodeInfo.parentNormalizedError = currNode->parentNormalizedError;
+		nodeInfo.normalizedlodError = currNode->normalizedlodError;
+		nodeInfo.nodeStatus = currNode->nodeStatus;
+		nodeInfo.depth = currNode->depth;
+		nodeInfo.index = currNode->index;
+		nodeInfo.clusterIndices = currNode->clusterIndices;
+		ASSERT(flattenedBVHNodeInfos[currNode->index].nodeStatus == INVALID, "Repeated index!");
+		ASSERT(currNode->index < flattenedBVHNodeInfos.size(), "index over flattenedBVHNodeInfos.size()");
+		nodeQueue.pop();
+		if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
+		{
+			ASSERT(currNode->clusterIndices.size() <= CLUSTER_GROUP_MAX_SIZE, "cluster group size over threshold!");
+			//std::cout << "Leaf node: " <<
+			//	"pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+			//	"pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+			//	std::endl;
+		}
+		else
+		{
+			//std::cout << "Non-leaf node: "
+			//	"pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+			//	"pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+			//	std::endl;
+			for (auto child : currNode->children)
+			{
+				nodeQueue.push(child);
+			}
+		}
+		flattenedBVHNodeInfos[currNode->index] = nodeInfo;
+	}
+}
+
 void NaniteMesh::generateNaniteInfo() {
 	MyMesh mymesh;
 	vkglTFMeshToOpenMesh(mymesh, *vkglTFMesh);
@@ -116,6 +227,7 @@ void NaniteMesh::generateNaniteInfo() {
 		meshLOD.buildClusterGraph();
 		meshLOD.colorClusterGraph(); // Cluster graph is needed to assign adjacent cluster different colors
 		meshLOD.generateClusterGroup();
+		meshLOD.createBVH();
 		currFaceNum = meshLOD.mesh.n_faces();
 		clusterGroupNum = meshLOD.clusterGroupNum;
 
@@ -144,6 +256,9 @@ void NaniteMesh::generateNaniteInfo() {
 	// Linearize DAG
 	
 	//flattenDAG();
+
+	// Linearize BVH
+	flattenBVH();
 	
 	// Save mesh for debugging
 	//{
@@ -187,6 +302,16 @@ void NaniteMesh::serialize(const std::string& filepath)
 	{
 		result["mesh"][i] = meshes[i].toJson();
 	}
+	for (size_t i = 0; i < flattenedBVHNodeInfos.size(); i++)
+	{
+		//std::cout << "flattenedBVHNodeInfos index: " << flattenedBVHNodeInfos[i].index << std::endl;
+		if (flattenedBVHNodeInfos[i].nodeStatus == LEAF) {
+			std::cout << "flattenedBVHNodeInfos cluster sizes: " << flattenedBVHNodeInfos[i].clusterIndices.size() << std::endl;
+		}
+
+		result["flattenedBVHNodeInfos"][i] = flattenedBVHNodeInfos[i].toJson();
+	}
+	result["flattenedBVHNodeCounts"] = flattenedBVHNodeInfos.size();
 	result[cache_time_key] = std::time(nullptr);
 	result["lodNums"] = lodNums;
 
@@ -218,6 +343,19 @@ void NaniteMesh::deserialize(const std::string & filepath)
 		float percentage = static_cast<float>(i+1) / lodNums * 100.0;
 		std::cout << "\r";
 		std::cout << "[Loading] Mesh Info: " << std::fixed << std::setw(6) << std::setprecision(2) << percentage << "%";
+		std::cout.flush();
+	}
+	std::cout << std::endl;
+
+	int flattenedBVHNodeCounts = loadedJson["flattenedBVHNodeCounts"].get<uint32_t>();
+	flattenedBVHNodeInfos.resize(flattenedBVHNodeCounts, NaniteBVHNodeInfo());
+	for (int i = 0; i < flattenedBVHNodeCounts; ++i) {
+		auto& nodeInfo = flattenedBVHNodeInfos[i];
+		nodeInfo.fromJson(loadedJson["flattenedBVHNodeInfos"][i]);
+		//std::cout << nodeInfo.index << std::endl;
+		float percentage = static_cast<float>(i + 1) / flattenedBVHNodeCounts * 100.0;
+		std::cout << "\r";
+		std::cout << "[Loading] BVH Info: " << std::fixed << std::setw(6) << std::setprecision(2) << percentage << "%";
 		std::cout.flush();
 	}
 	std::cout << std::endl;
@@ -266,6 +404,7 @@ void NaniteMesh::initNaniteInfo(const std::string & filepath, bool useCache) {
 	}	
 
 	if (!hasInitialized) {
+		std::cerr << "Start building..." << std::endl;
 		generateNaniteInfo();
 		serialize(cachePath);
 		std::cout << cachePath << "nanite_info.json" << " generated" << std::endl;

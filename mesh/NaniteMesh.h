@@ -32,6 +32,11 @@ struct NaniteMesh {
 	std::vector<ClusterNode> flattenedClusterNodes;
 	void flattenDAG();
 
+	/************ Flatten BVH *************/
+	std::shared_ptr<NaniteBVHNode> virtualBVHRootNode;
+	std::vector<NaniteBVHNodeInfo> flattenedBVHNodeInfos;
+	void flattenBVH();
+
 	/************ Build Info *************/
 	void generateNaniteInfo();
 

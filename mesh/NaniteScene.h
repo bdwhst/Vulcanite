@@ -15,6 +15,10 @@ public:
 	vkglTF::Model::Vertices vertices;
 	vkglTF::Model::Indices indices;
 
+	std::shared_ptr<NaniteBVHNode> virtualRootNode; // The root node that connects all instances' root nodes
+	std::vector<BVHNodeInfo> nodeInfos; // cleaned version
+	std::vector<uint32_t> clusterIndexOffsets; 
+
 	uint32_t sceneIndicesCount = 0;
 
 	std::vector<ClusterInfo> clusterInfo;
@@ -32,5 +36,6 @@ public:
 
 	void createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
 	void createClusterInfos(vks::VulkanDevice* device, VkQueue transferQueue);
+	void createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transferQueue);
 	//void buildClusterInfo();
 };

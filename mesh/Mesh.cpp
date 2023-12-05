@@ -351,15 +351,20 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
         //    }
         //}
 #pragma endregion
-
+#if SIMPLIFICATION_DEBUG
         std::cout << "Cluster group: " << i << " Face num: " << currTargetFaceNum << std::endl;
-
+#endif
         auto n_collapses = decimater.decimate_to_faces(0, currTargetFaceNum, true);
+#if SIMPLIFICATION_DEBUG
         std::cout << "Total error: " << decimater.module(hModQuadric).total_err() << std::endl;
+        std::cout << "n_collapses: " << n_collapses << std::endl;
+#endif
         clusterGroups[i].qemError = decimater.module(hModQuadric).total_err();
         decimater.module(hModQuadric).clear_total_err();
-        std::cout << "n_collapses: " << n_collapses << std::endl;
         mymesh.garbage_collection();
+#if SIMPLIFICATION_DEBUG
+        std::cout << "NUM FACES AFTER: " << mymesh.n_faces() << std::endl;
+#endif
         //MyMesh submeshAfterDecimation;
         for (const auto & vh: mymesh.vertices())
         {
@@ -391,8 +396,6 @@ void Mesh::simplifyMesh(MyMesh & mymesh)
         //}
 
 #pragma endregion
-
-        std::cout << "NUM FACES AFTER: " << mymesh.n_faces() << std::endl;
     }
     //std::cout << "Curr cluster group num: " << clusterGroups.size() << std::endl;
     for (const auto& vh : mymesh.vertices())
@@ -849,3 +852,373 @@ void Mesh::draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineL
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertices.buffer, offsets);
     vkCmdDraw(commandBuffer, vertices.count, 1, 0, 0);
 }
+
+void Mesh::createBVH()
+{
+    buildBVH();
+    //traverseBVH();
+    //flattenBVH();
+}
+
+void Mesh::buildBVH()
+{
+    // Build BVH after mesh decimation (because we need the qem error here)
+    
+    // For LOD 0, all clusters have qem error -1.
+    //      gen cluster -> gen cluster group -> build bvh
+    // For LOD N(N>0), all clusters have qem error > 0.
+    //      A. lodN-1 decimation -> re-cluster within old cluster group -> build bvh (use old cluster group, because we need to assure that parentError are the same) -> re-grouping 
+    //      OR
+    //      B. lodN-1 decimation -> re-cluster within old cluster group -> re-grouping -> build bvh (use new cluster group because this can be easier implemented)
+    // We will use B for implementation simplicity
+    
+    // build aabb for each cluster group
+    // for each recursion
+    //  merge aabb
+    //  get longest axis of merged aabb
+    //  sort cluster group by aabb's longest axis
+    //  split by longest axis
+    //  
+
+    //std::vector<uint32_t> originalClusterGroupIndex;
+    std::vector<uint32_t> clusterGroupIndex;
+    for (int i = 0; i < clusterGroups.size(); ++i)
+    {
+        //originalClusterGroupIndex.push_back(i);
+        clusterGroupIndex.push_back(i);
+        auto& clusterGroup = clusterGroups[i];
+        getClusterGroupAABB(clusterGroup);
+        //std::cout << "clusterGroupIndex: " << i << 
+        //    " clusterGroup.pMin: " << clusterGroup.pMin.x << " " << clusterGroup.pMin.y << " " << clusterGroup.pMin.z <<
+        //    " clusterGroup.pMax: " << clusterGroup.pMax.x << " " << clusterGroup.pMax.y << " " << clusterGroup.pMax.z <<
+        //    std::endl;
+    }
+
+    std::stack<std::shared_ptr<NaniteBVHNode>> nodeStack;
+    rootBVHNode = std::make_shared<NaniteBVHNode>();
+    rootBVHNode->start = 0;
+    rootBVHNode->end = clusterGroups.size();
+    rootBVHNode->nodeStatus = NaniteBVHNodeStatus::NODE;
+    nodeStack.push(rootBVHNode);
+
+    std::set<int> clusterIndexSet;
+    for (auto & clusterGroup: clusterGroups)
+    {
+        for (auto & clusterIndex: clusterGroup.clusterIndices)
+        {
+            ASSERT(clusterIndexSet.find(clusterIndex) == clusterIndexSet.end(), "Repeated cluster index in different cluster group!");
+            clusterIndexSet.insert(clusterIndex);
+        }
+    }
+    while (!nodeStack.empty()) 
+    {
+        auto & currNode = nodeStack.top();
+        for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
+        {
+            currNode->clusterIndices[i] = -1;
+        }
+        std::string indent(currNode->depth, '\t');
+        nodeStack.pop();
+        if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF) { // Leaf node, store a cluster-group-sized clusters
+            std::cout << indent << "Leaf Node" << std::endl;
+            auto& clusterGroup = clusterGroups[currNode->start];
+            //currNode->clusterIndices = clusterGroup.clusterIndices;
+            
+            // Init clusterIndices
+            ASSERT(clusterGroup.clusterIndices.size() <= CLUSTER_GROUP_MAX_SIZE, "too many clusterIndices");
+            for (size_t i = 0; i < clusterGroup.clusterIndices.size(); i++)
+            {
+                currNode->clusterIndices[i] = clusterGroup.clusterIndices[i];
+            }
+            currNode->pMin = clusterGroup.pMin;
+            currNode->pMax = clusterGroup.pMax;
+
+            for (auto clusterIndex: currNode->clusterIndices)
+            {
+                // TODO: Make sure this part uses the right error
+                std::cout <<indent << "clusterIndex: " << clusterIndex << " clusters.size(): " << clusters.size() << std::endl;
+                ASSERT(clusterIndex < int(clusters.size()), "clusterIndex overflow");
+                if (clusterIndex >= 0) {
+                    ASSERT(clusterIndexSet.find(clusterIndex) != clusterIndexSet.end(), "clusterIndex not found in clusterIndexSet, means it's repeated!");
+                    clusterIndexSet.erase(clusterIndex);
+                    currNode->normalizedlodError    = std::max(currNode->normalizedlodError, clusters[clusterIndex].normalizedlodError);
+                    currNode->parentNormalizedError = std::max(currNode->parentNormalizedError, clusters[clusterIndex].parentNormalizedError);
+                }
+            }
+        }
+        else { // Non-leaf nodes
+            std::cout << indent << "Non-leaf Node" << std::endl;
+            // Merge AABB
+			glm::vec3 pMin = glm::vec3(FLT_MAX);
+			glm::vec3 pMax = glm::vec3(-FLT_MAX);
+            for (int i = currNode->start; i < currNode->end; ++i)
+            {
+				auto& clusterGroup = clusterGroups[i];
+				pMin = glm::min(pMin, clusterGroup.pMin);
+				pMax = glm::max(pMax, clusterGroup.pMax);
+			}
+			currNode->pMin = pMin;
+			currNode->pMax = pMax;
+            //std::cout << "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+            //    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+            //    std::endl;
+            std::cout << indent << "currNode->start: " << currNode->start << " currNode->end: " << currNode->end << std::endl;
+            if (currNode->end - currNode->start < 4) { // One level higher than leaf node, stop partitioning from now on
+                currNode->nodeStatus = NaniteBVHNodeStatus::NODE;
+                std::cout << indent << "stop partitioning" << std::endl;
+                for (int i = currNode->start; i < currNode->end; ++i)
+                {
+                    std::cout << indent << "leaf: " << i << std::endl;
+                    std::shared_ptr<NaniteBVHNode> leafNode(new NaniteBVHNode());
+                    leafNode->nodeStatus = NaniteBVHNodeStatus::LEAF;
+                    leafNode->start = i;
+                    leafNode->end = i + 1;
+                    leafNode->depth = currNode->depth + 1;
+                    currNode->children.push_back(leafNode);
+                }
+                for (auto & child: currNode->children)
+                {
+                    nodeStack.push(child);
+                }
+            }
+            else { // Start partitioning
+
+                // TODO: Should get 2 longest axis and sort by them to split and push 4 children (BVH4)
+			    // Get longest axis
+			    glm::vec3 diff = pMax - pMin;
+			    int longestAxis = 0;
+			    if (diff[1] > diff[longestAxis]) longestAxis = 1;
+			    if (diff[2] > diff[longestAxis]) longestAxis = 2;
+
+			    // Sort by longest axis
+                std::sort(clusterGroupIndex.begin() + currNode->start, clusterGroupIndex.begin() + currNode->end, [&](uint32_t a, uint32_t b) {
+				    return clusterGroups[a].pMin[longestAxis] < clusterGroups[b].pMin[longestAxis];
+				    });
+
+			    // Split by longest axis
+			    int mid = (currNode->start + currNode->end) / 2;
+
+                // Get second longest axis
+                int axis2 = (longestAxis + 1) % 3; 
+                int axis3 = (longestAxis + 2) % 3;
+                int secondLongestAxis = diff[axis2] > diff[axis3] ? axis2 : axis3;
+
+                // Sort by second longest axis
+                std::sort(clusterGroupIndex.begin() + currNode->start, clusterGroupIndex.begin() + mid, [&](uint32_t a, uint32_t b) {
+                    return clusterGroups[a].pMin[secondLongestAxis] < clusterGroups[b].pMin[secondLongestAxis];
+					});
+                int mid2 = (currNode->start + mid) / 2;
+                
+                std::sort(clusterGroupIndex.begin() + mid, clusterGroupIndex.begin() + currNode->end, [&](uint32_t a, uint32_t b) {
+                    return clusterGroups[a].pMin[secondLongestAxis] < clusterGroups[b].pMin[secondLongestAxis];
+                    });
+                int mid3 = (mid + currNode->end) / 2;
+
+			    std::shared_ptr<NaniteBVHNode > node11(new NaniteBVHNode());
+			    node11->start = currNode->start;
+			    node11->end = mid2;
+                node11->depth = currNode->depth + 1;
+                node11->nodeStatus = NODE;
+
+                std::shared_ptr<NaniteBVHNode> node12(new NaniteBVHNode());
+                node12->start = mid2;
+                node12->end = mid;
+                node12->depth = currNode->depth + 1;
+                node12->nodeStatus = NODE;
+
+                std::shared_ptr<NaniteBVHNode> node21(new NaniteBVHNode());
+                node21->start = mid;
+                node21->end = mid3;
+                node21->depth = currNode->depth + 1;
+                node21->nodeStatus = NODE;
+
+			    std::shared_ptr<NaniteBVHNode > node22(new NaniteBVHNode());
+                node22->start = mid3;
+                node22->end = currNode->end;
+                node22->depth = currNode->depth + 1;
+                node22->nodeStatus = NODE;
+
+                currNode->children.push_back(node11);
+                currNode->children.push_back(node12);
+                currNode->children.push_back(node21);
+                currNode->children.push_back(node22);
+                nodeStack.push(node11);
+                nodeStack.push(node12);
+                nodeStack.push(node21);
+                nodeStack.push(node22);
+            }
+        }
+    }
+
+    ASSERT(clusterIndexSet.size() == 0, "clusterIndexSet should be empty after building BVH");
+    // TODO: Need another pass to update the error of each node
+
+}
+
+void Mesh::traverseBVH()
+{
+    // TODO: Update error
+	std::stack<std::shared_ptr<NaniteBVHNode>> nodeStack;
+	nodeStack.push(rootBVHNode);
+    while (!nodeStack.empty())
+    {
+		auto currNode = nodeStack.top();
+		nodeStack.pop();
+        if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
+        {
+			std::cout << "Leaf node: " << 
+                "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+                "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+                std::endl;
+		}
+        else
+        {
+			std::cout << "Non-leaf node: " 
+                "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+                "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+                std::endl;
+            for (auto child : currNode->children)
+            {
+				nodeStack.push(child);
+			}
+		}
+	}
+}
+
+void Mesh::getClusterGroupAABB(ClusterGroup& clusterGroup)
+{
+    glm::vec3 min = glm::vec3(FLT_MAX);
+	glm::vec3 max = glm::vec3(-FLT_MAX);
+    for (MyMesh::FaceIter face_it = mesh.faces_begin(); face_it != mesh.faces_end(); ++face_it) {
+        MyMesh::FaceHandle fh = *face_it;
+        auto clusterIdx = triangleClusterIndex[fh.idx()];
+        auto clusterGroupIdx = clusterGroupIndex[clusterIdx];
+
+        glm::vec3 pMinWorld, pMaxWorld;
+        glm::vec3 p0, p1, p2;
+        MyMesh::FaceVertexIter fv_it = mesh.fv_iter(fh);
+
+        // Get the positions of the three vertices
+        auto point0 = mesh.point(*fv_it);
+        ++fv_it;
+        auto point1 = mesh.point(*fv_it);
+        ++fv_it;
+        auto point2 = mesh.point(*fv_it);
+
+        p0[0] = point0[0];
+        p0[1] = point0[1];
+        p0[2] = point0[2];
+
+        p1[0] = point1[0];
+        p1[1] = point1[1];
+        p1[2] = point1[2];
+
+        p2[0] = point2[0];
+        p2[1] = point2[1];
+        p2[2] = point2[2];
+
+        p0 = glm::vec3(glm::vec4(p0, 1.0f));
+        p1 = glm::vec3(glm::vec4(p1, 1.0f));
+        p2 = glm::vec3(glm::vec4(p2, 1.0f));
+
+        getTriangleAABB(p0, p1, p2, pMinWorld, pMaxWorld);
+
+        clusterGroups[clusterGroupIdx].mergeAABB(pMinWorld, pMaxWorld);
+    }
+}
+
+//void Mesh::flattenBVH()
+//{
+//    std::vector<NaniteBVHNodeInfo> flattenedBVHNodes;
+//    std::queue<std::shared_ptr<NaniteBVHNode>> nodeQueue;
+//    uint32_t index = 0;
+//
+//    std::vector<uint32_t> levelCounts;
+//    uint32_t maxLevels = 0;
+//    nodeQueue.push(rootBVHNode);
+//    // Do a two-pass tree bfs
+//    //      First pass update flattened index
+//    //      Second pass update children index
+//    while (!nodeQueue.empty())
+//    {
+//        auto currNode = nodeQueue.front();
+//        currNode->index = index;
+//        //std::cout << currNode->level << " " << currNode->index << " " << levelCounts.size() << std::endl;
+//        ASSERT(currNode->level <= levelCounts.size(), "currNode->level should never be greater than size of levelCounts, check traversal implementation");
+//        if (currNode->level == levelCounts.size()) 
+//        {
+//            levelCounts.push_back(1);
+//        }
+//        else
+//        {
+//            levelCounts[currNode->level] += 1;
+//        }
+//        index++;
+//        nodeQueue.pop();
+//        if (currNode->nodeStatus = NaniteBVHNodeStatus::LEAF)
+//        {
+//            //std::cout << "Leaf node: " <<
+//            //    "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+//            //    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+//            //    std::endl;
+//        }
+//        else
+//        {
+//            //std::cout << "Non-leaf node: "
+//            //    "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+//            //    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+//            //    std::endl;
+//            for (auto child : currNode->children)
+//            {
+//                nodeQueue.push(child);
+//            }
+//        }
+//    }
+//    flattenedBVHNodes.resize(index);  // `index` now is the size of nodes
+//    //for (size_t i = 0; i < levelCounts.size(); i++)
+//    //{
+//    //    std::cout << "i " << i << " levelCounts[i]: " << levelCounts[i] << std::endl;
+//    //}
+//    nodeQueue.push(rootBVHNode);
+//    while (!nodeQueue.empty()) 
+//    {
+//        
+//        auto currNode = nodeQueue.front();
+//        NaniteBVHNodeInfo nodeInfo;
+//        ASSERT(currNode->nodeStatus == VIRTUAL_NODE || currNode->children.size() <= 4, "size of non-virtual nodes' children should never be over 4");
+//        nodeInfo.children.resize(currNode->children.size());
+//        for (int i = 0; i < currNode->children.size(); ++i)
+//        {
+//            nodeInfo.children[i] = currNode->children[i]->index;
+//        }
+//        nodeInfo.pMax = currNode->pMax;
+//        nodeInfo.pMin = currNode->pMin;
+//        nodeInfo.parentNormalizedError = currNode->parentNormalizedError;
+//        nodeInfo.normalizedlodError = currNode->normalizedlodError;
+//        nodeInfo.nodeStatus = currNode->nodeStatus;
+//        nodeInfo.level = currNode->level;
+//        ASSERT(flattenedBVHNodes[currNode->index].children[0] == -1, "Repeated index!");
+//        ASSERT(currNode->index < flattenedBVHNodes.size(), "index over flattenedBVHNodes.size()");
+//        flattenedBVHNodes[currNode->index] = nodeInfo;
+//        nodeQueue.pop();
+//        if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
+//        {
+//            std::cout << "Leaf node: " <<
+//                "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+//                "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+//                std::endl;
+//        }
+//        else
+//        {
+//            std::cout << "Non-leaf node: "
+//                "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+//                "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+//                std::endl;
+//            for (auto child : currNode->children)
+//            {
+//                nodeQueue.push(child);
+//            }
+//        }
+//    }
+//
+//}

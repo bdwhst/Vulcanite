@@ -2,6 +2,8 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <stack>
+#include <queue>
 
 #include <OpenMesh/Core/IO/MeshIO.hh>
 #include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
@@ -19,7 +21,10 @@
 #include "Graph.h"
 #include "Cluster.h"
 #include "ClusterGroup.h"
+#include "NaniteBVH.h"
 #include "utils.h"
+
+#define SIMPLIFICATION_DEBUG 0
 
 struct Mesh {
 
@@ -58,14 +63,14 @@ public:
 	uint32_t lodLevel = -1;
 	Graph triangleGraph;
 	int clusterNum;
-	const int targetClusterSize = CLUSTER_SIZE;
+	const int targetClusterSize = CLUSTER_TARGET_SIZE;
 	std::vector<idx_t> triangleClusterIndex;
 	std::unordered_map<int, int> clusterColorAssignment;
 	std::vector<Cluster> clusters;
 
 	Graph clusterGraph;
 	int clusterGroupNum;
-	const int targetClusterGroupSize = CLUSTER_GROUP_SIZE;
+	const int targetClusterGroupSize = CLUSTER_GROUP_TARGET_SIZE;
 	std::vector<idx_t> clusterGroupIndex;
 	std::unordered_map<int, int> clusterGroupColorAssignment;
 	std::vector<ClusterGroup> clusterGroups;
@@ -93,6 +98,17 @@ public:
 	void draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineLayout pipelineLayout, uint32_t bindImageSet);
 	std::vector<glm::vec3> positions;
 
+	std::shared_ptr<NaniteBVHNode> rootBVHNode;
+	void createBVH();
+	void buildBVH();
+	void traverseBVH();
+	void getClusterGroupAABB(ClusterGroup & clusterGroup);
+	void flattenBVH();
+
+	std::vector<NaniteBVHNodeInfo> flattenedBVHNodes;
+	std::vector<uint32_t> levelCounts; // Store the counts of nodes in each level
+
+
 	vks::VulkanDevice* device;
 	const vkglTF::Model* model;
 	vkglTF::Model::Vertices vertices;
@@ -103,6 +119,7 @@ public:
 	std::vector<vkglTF::Vertex> uniqueVertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
 };
+
 
 //using OpenMesh::Decimater::ModQuadricT;
 //== NAMESPACE ================================================================

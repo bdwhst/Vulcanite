@@ -566,10 +566,10 @@ public:
 		//models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
 		
-		models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		naniteMesh.setModelPath((getAssetPath() + "models/dragon/").c_str());
+		models.object.loadFromFile(getAssetPath() + "models/bunny.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		naniteMesh.setModelPath((getAssetPath() + "models/bunny/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf", false);
 
 		for (int i = 0; i < naniteMesh.meshes.size(); i++)
 		{
@@ -581,42 +581,41 @@ public:
 
 		// Uncomment this part for performance test scene
 		//modelMats.clear();
-		//for (int i = -7; i <= 7; i++)
+		//for (int i = -3; i <= 3; i++)
 		//{
-		//	for (int j = -7; j <= 7; j++) 
+		//	for (int j = -3; j <= 3; j++) 
 		//	{
-		//		auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
+		//		auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.3f, j * 3));
 		//		auto& instance = Instance(&naniteMesh, modelMat);
 		//		modelMats.push_back(modelMat);
 		//		scene.naniteObjects.push_back(instance);
-		//
 		//	}
 		//}
 
 		// Uncomment this part for normal scene
-		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
-		//auto & instance2 = Instance(&naniteMesh, modelMats[1]);
+		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		auto & instance2 = Instance(&naniteMesh, modelMats[1]);
 		//auto & instance3 = Instance(&naniteMesh, modelMats[2]);
-		//scene.naniteObjects.push_back(instance1);
-		//scene.naniteObjects.push_back(instance2);
+		scene.naniteObjects.push_back(instance1);
+		scene.naniteObjects.push_back(instance2);
 		//scene.naniteObjects.push_back(instance3);
 
 		// Uncomment this part for normal multi-mesh scene
-		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
-		scene.naniteObjects.push_back(instance1);
-		NaniteMesh naniteMesh2;
-		naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
-		naniteMesh2.loadvkglTFModel(models.object);
-		naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
-		for (int i = 0; i < naniteMesh2.meshes.size(); i++)
-		{
-			naniteMesh2.meshes[i].initUniqueVertexBuffer();
-			naniteMesh2.meshes[i].initVertexBuffer();
-			naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
-		}
-		scene.naniteMeshes.push_back(naniteMesh2);
-		auto& instance2 = Instance(&naniteMesh2, modelMats[1]);
-		scene.naniteObjects.push_back(instance2);
+		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		//scene.naniteObjects.push_back(instance1);
+		//NaniteMesh naniteMesh2;
+		//naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
+		//naniteMesh2.loadvkglTFModel(models.object);
+		//naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
+		//for (int i = 0; i < naniteMesh2.meshes.size(); i++)
+		//{
+		//	naniteMesh2.meshes[i].initUniqueVertexBuffer();
+		//	naniteMesh2.meshes[i].initVertexBuffer();
+		//	naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
+		//}
+		//scene.naniteMeshes.push_back(naniteMesh2);
+		//auto& instance2 = Instance(&naniteMesh2, modelMats[1]);
+		//scene.naniteObjects.push_back(instance2);
 
 		// Uncomment this part for performance test multi-mesh scene
 		//NaniteMesh naniteMesh2;
@@ -653,6 +652,7 @@ public:
 		////
 		scene.createVertexIndexBuffer(vulkanDevice, queue);
 		scene.createClusterInfos(vulkanDevice, queue);
+		scene.createBVHNodeInfos(vulkanDevice, queue);
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
 		textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);
@@ -1976,7 +1976,8 @@ public:
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			scene.sceneIndicesCount / 2 * sizeof(uint32_t),
-			//width * height * CLUSTER_THRESHOLD * 3 * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
+			//scene.sceneIndicesCount * sizeof(uint32_t),
+			//width * height * CLUSTER_MAX_SIZE * 3 * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
 			&culledIndicesBuffer.buffer,
 			&culledIndicesBuffer.memory,
 			nullptr));
@@ -1985,7 +1986,8 @@ public:
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 			scene.sceneIndicesCount / 2 * sizeof(uint16_t),
-			//width * height * CLUSTER_THRESHOLD * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
+			//scene.sceneIndicesCount * sizeof(uint16_t),
+			//width * height * CLUSTER_MAX_SIZE * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
 			&culledObjectIndicesBuffer.buffer,
 			&culledObjectIndicesBuffer.memory,
 			nullptr));

@@ -18,7 +18,7 @@ void main()
     uvec2 screenSize = imageSize(hwrVisBuffer).xy;
     ivec2 index = ivec2(gl_GlobalInvocationID.xy);
     if(index.x>=screenSize.x || index.y>=screenSize.y) return;
-    vec2 uv = vec2(index)/screenSize;
+    vec2 uv = vec2(index+vec2(0.5))/screenSize;
     float hwrDepth = texture(hwrDepthBuffer,uv).x;
     uint hwrVis = imageLoad(hwrVisBuffer,index).x;
     int64_t swrDepthVis = imageLoad(swrDepthVisBuffer,index).x;

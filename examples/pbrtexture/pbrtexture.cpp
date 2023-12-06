@@ -208,7 +208,7 @@ public:
 	} cullingPushConstants;
 
 	struct RenderingPushConstants {
-		int vis_clusters;
+		int vis_clusters = 0;
 	} renderingPushConstants;
 
 	vks::Buffer HWRIndicesBuffer;
@@ -675,6 +675,7 @@ public:
 			// Objects shading
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipelineLayout, 0, 1, &descManager->getSet("shading", 0), 0, 0);
+			vkCmdPushConstants(drawCmdBuffers[i], shadingPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 
 			// Objects
@@ -1006,9 +1007,9 @@ public:
 		manager->addSetLayout("errorProj", setLayoutBindings, 1);
 
 		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 0),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 1),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 2),
 		};
 		manager->addSetLayout("hwRast", setLayoutBindings, 1);
 
@@ -1334,22 +1335,21 @@ public:
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &hwrastPipelineLayout));
 			pipelineCI.layout = hwrastPipelineLayout;
 			pipelineCI.renderPass = hwRastRenderPass;
-			std::array<VkPipelineShaderStageCreateInfo, 4> shaderStages1;
+			std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages1;
 			shaderStages1[0] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 			shaderStages1[1] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-			shaderStages1[2] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.tesc.spv", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
-			shaderStages1[3] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.tese.spv", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+			shaderStages1[2] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.geom.spv", VK_SHADER_STAGE_GEOMETRY_BIT);
 			pipelineCI.pStages = shaderStages1.data();
-			pipelineCI.stageCount = 4;
-			rasterizationState.cullMode = VK_CULL_MODE_NONE;
-			VkPipelineTessellationStateCreateInfo tessellationState = {};
-			tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
-			tessellationState.patchControlPoints = 3; // Number of control points per patch
-			pipelineCI.pTessellationState = &tessellationState;
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+			pipelineCI.stageCount = 3;
+			rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+			//VkPipelineTessellationStateCreateInfo tessellationState = {};
+			//tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+			//tessellationState.patchControlPoints = 3; // Number of control points per patch
+			//pipelineCI.pTessellationState = &tessellationState;
+			//inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &hwrastPipeline));
-			pipelineCI.pTessellationState = nullptr;
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			//pipelineCI.pTessellationState = nullptr;
+			//inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		}
 
 		{
@@ -1374,17 +1374,26 @@ public:
 			pipelineCI.pStages = shaderStages.data();
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &debugQuadPipeline));
 		}
-
+		
 		{
+			// Shading pipeline
+			push_constant.size = sizeof(RenderingPushConstants);
+			push_constant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("shading"), 1);
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &shadingPipelineLayout));
+
 			pipelineCI.layout = shadingPipelineLayout;
 			pipelineCI.renderPass = renderPass;
 			shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/shading.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 			shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/shading.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			pipelineCI.stageCount = 2;
+			pipelineCI.pStages = shaderStages.data();
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingPipeline));
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 		}
-
+		//ASSERT(false, "debug interrupt");
 		{
 			// Hi-Z Buffer build pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/genhiz.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
@@ -1460,7 +1469,7 @@ public:
 		}
 
 		{
-			//Error projection pipeline
+			// Error projection pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/error.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
 			VkPushConstantRange push_constant{};
 			push_constant.size = sizeof(ErrorPushConstants);

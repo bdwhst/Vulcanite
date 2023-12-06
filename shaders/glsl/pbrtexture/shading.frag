@@ -57,6 +57,10 @@ layout (binding = 8) uniform samplerCube samplerIrradiance;
 layout (binding = 9) uniform sampler2D samplerBRDFLUT;
 layout (binding = 10) uniform samplerCube prefilteredMap;
 
+layout(push_constant) uniform PushConstants {
+    int vis_clusters;
+} pcs;
+
 layout (location = 0) in vec2 inUV;
 layout (location = 0) out vec4 outColor;
 
@@ -162,17 +166,70 @@ vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float
 	return color;
 }
 
+// vec4 int64_hash_color(int64_t val)
+// {
+// 	vec4 col;
+// 	col.x = uintBitsToFloat((uint)((val>>0)&0xFF)|((val>>32)&0xFF));
+// 	col.y = uintBitsToFloat((uint)((val>>8)&0xFF)|((val>>40)&0xFF));
+// 	col.z = uintBitsToFloat((uint)((val>>16)&0xFF)|((val>>48)&0xFF));
+// 	col.w = uintBitsToFloat((uint)((val>>24)&0xFF)|((val>>54)&0xFF));
+// 	return col;
+// }
+
+
+vec4 hashUIntToVec4(uint value) {
+    // Constants are chosen arbitrarily for demonstration purposes
+    const uint prime1 = 2654435761u;
+    const uint prime2 = 2246822519u;
+    const uint prime3 = 3266489917u;
+    const uint prime4 = 668265263u;
+
+    uint h1 = value * prime1;
+    uint h2 = value * prime2;
+    uint h3 = value * prime3;
+    uint h4 = value * prime4;
+
+    // Apply a non-linear transformation using exp function
+    // Adjust the scale to control the range and rate of the exponential growth
+    float scale = 4.0 / 255.0;
+    return vec4(
+        exp(-scale * float(255 - (h1 & 0xFF))),
+        exp(-scale * float(255 - (h2 & 0xFF))),
+        exp(-scale * float(255 - (h3 & 0xFF))),
+        exp(-scale * float(255 - (h4 & 0xFF)))
+    );
+}
+
+
+
+void visualizeID(uint ID)
+{
+	vec3 color = hashUIntToVec4(ID).xyz;
+	// Tone mapping
+	color = Uncharted2Tonemap(color * uboParams.exposure);
+	color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));	
+	// Gamma correction
+	color = pow(color, vec3(1.0f / uboParams.gamma));
+
+	outColor = vec4(color,1.0);
+
+}
+
+
 void main()
 {
     ivec2 screenSize = imageSize(visBuffer);
-    ivec2 screenPos = ivec2(inUV*screenSize);
+    ivec2 screenPos = ivec2(gl_FragCoord.xy);
     uint ID = imageLoad(visBuffer,screenPos).x;
 	if(ID>=0xFFFFFFFF) discard;
     float depth = imageLoad(depthBuffer,screenPos).x;
     uint clusterID = ID>>8;
     uint triangleID = ID&0xFF;
-	// outColor = vec4(vec3(ID>=0xFFFFFFFF?1.0:0.0),1.0);
-	// return;
+	if(pcs.vis_clusters==1)
+	{
+		visualizeID(ID); 
+		return;
+	}
 	// outColor = vec4(vec3(triangleID/(0xFF*1.0)),1.0);
 	// return;
     Cluster currCluster = inCluster[clusterID];

@@ -6,12 +6,29 @@
 #extension GL_EXT_shader_image_int64 : enable
 layout(local_size_x = WORKGROUP_SIZE, local_size_y = WORKGROUP_SIZE, local_size_z = 1) in;
 
-layout(set = 0, binding = 0, r64i) uniform i64image2D swrDepthVisBuffer;
+layout(set = 0, binding = 0, r64ui) uniform u64image2D swrDepthVisBuffer;
+
+layout(std430, set = 0, binding = 1) buffer readonly NumVertices_sw {
+   uint indexCount;
+}numVertices_sw;
+
+layout(std430, set = 0, binding = 2) buffer writeonly SWRDispatch {
+   uint x;
+   uint y;
+   uint z;
+}swrDispatch;
+
 
 void main()
 {
     uvec2 screenSize = imageSize(swrDepthVisBuffer).xy;
     ivec2 index = ivec2(gl_GlobalInvocationID.xy);
+    if(index.x==0&&index.y==0)
+    {
+        swrDispatch.x = (numVertices_sw.indexCount/3+31)/32;
+        swrDispatch.y = 1;
+        swrDispatch.z = 1;
+    }
     if(index.x>=screenSize.x || index.y>=screenSize.y) return;
-    imageStore(swrDepthVisBuffer,index,i64vec4(0x8000000000000000L));
+    imageStore(swrDepthVisBuffer,index,i64vec4(0x0000000000000000L));
 }

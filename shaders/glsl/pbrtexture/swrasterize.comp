@@ -33,10 +33,10 @@ layout(set = 0, binding = 3) buffer readonly ObjectIdIn{
 };
 
 layout(set = 0, binding = 4) uniform DrawInfo{
-	uint num_triangles;
+	uint num_indices;
 }drawInfo;
 
-layout(set = 0, binding = 5, r64i) uniform i64image2D swrImage;
+layout(set = 0, binding = 5, r64ui) uniform u64image2D swrImage;
 
 layout (set = 0, binding = 6) uniform UBO 
 {
@@ -48,7 +48,8 @@ layout (set = 0, binding = 6) uniform UBO
 
 int64_t packPixel(float depth, uint clusterID, uint triangleID)
 {
-	int64_t ans = 0x8000000000000000L;
+	int64_t ans = 0x0000000000000000L;
+	depth = 1.0-depth;
 	ans |= ((int64_t(floatBitsToInt(depth)))<<32);
 	ans |= ((int64_t(clusterID&0xFFFFFF))<<8);
 	ans |= int64_t(triangleID&0xFF);
@@ -126,7 +127,7 @@ void main()
 {
 	uint index = gl_GlobalInvocationID.x;
     
-    if(index >= drawInfo.num_triangles) return;
+    if(index * 3 >= drawInfo.num_indices) return;
 	uint v0i = inTriangles[index*3];
 	uint v1i = inTriangles[index*3+1];
 	uint v2i = inTriangles[index*3+2];

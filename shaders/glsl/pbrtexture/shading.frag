@@ -221,7 +221,7 @@ void main()
     ivec2 screenSize = imageSize(visBuffer);
     ivec2 screenPos = ivec2(gl_FragCoord.xy);
     uint ID = imageLoad(visBuffer,screenPos).x;
-	if(ID>=0xFFFFFFFF) discard;
+	if(ID==0xFFFFFFFF) discard;
     float depth = imageLoad(depthBuffer,screenPos).x;
     uint clusterID = ID>>8;
     uint triangleID = ID&0xFF;

@@ -244,8 +244,8 @@ void main()
         pixelArea = screenSpan.x*screenSpan.y;
     }
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
-    //bool useSWR = pixelArea<128.0;
-    bool useSWR = false;
+    bool useSWR = pixelArea<256.0;
+    //bool useSWR = true;
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
     // if(gl_LocalInvocationID.x==0)

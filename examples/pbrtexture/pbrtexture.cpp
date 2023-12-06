@@ -184,7 +184,7 @@ public:
 		uint32_t firstIndex;
 		uint32_t vertexOffset;
 		uint32_t firstInstance;
-	}drawIndexedIndirect;
+	}hwrDrawIndexedIndirect;
 
 	struct UBOParams {
 		glm::vec4 lights[4];
@@ -220,8 +220,15 @@ public:
 	vks::Buffer modelMatsBuffer;
 	vks::Buffer clustersInfoBuffer;
 	vks::Buffer cullingUniformBuffer;
-	vks::Buffer drawIndexedIndirectBuffer;
+	vks::Buffer hwrDrawIndexedIndirectBuffer;
 
+	struct SWRIndirectBuffer {
+		uint32_t x = 0;
+		uint32_t y = 0;
+		uint32_t z = 0;
+	}swrIndirectBuffer;
+
+	vks::Buffer swrIndirectDispatchBuffer;
 	vks::Buffer swrNumVerticesBuffer;
 
 	struct ErrorPushConstants {
@@ -427,7 +434,7 @@ public:
 			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.buffer = drawIndexedIndirectBuffer.buffer;
+			bufferBarrier.buffer = hwrDrawIndexedIndirectBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
 
@@ -489,6 +496,15 @@ public:
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipelineLayout, 0, 1, &descManager->getSet("clearImage", 0), 0, 0);
 			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = swrIndirectDispatchBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
 			imageMemBarrier.image = SWRBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -504,7 +520,8 @@ public:
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipelineLayout, 0, 1, &descManager->getSet("swRast", 0), 0, 0);
-			vkCmdDispatch(drawCmdBuffers[i], (scene.visibleIndicesCount / 3 + 31) / 32, 1, 1);
+			vkCmdDispatchIndirect(drawCmdBuffers[i], swrIndirectDispatchBuffer.buffer, 0);
+			//vkCmdDispatch(drawCmdBuffers[i], (scene.visibleIndicesCount / 3 + 31) / 32, 1, 1);
 
 			imageMemBarrier.image = SWRBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -549,7 +566,7 @@ public:
 			vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			VkDeviceSize offsets[1] = { 0 };
 			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
 			bufferBarrier.srcAccessMask = VK_ACCESS_INDEX_READ_BIT;
@@ -800,7 +817,7 @@ public:
 				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
 				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
 				vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
 				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
@@ -899,11 +916,11 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -1; i <= 0; i++)
+		for (int i = -7; i <= 7; i++)
 		{
-			for (int j = -1; j <= 0; j++) 
+			for (int j = -7; j <= 7; j++) 
 			{
-				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
+				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
 				modelMats.emplace_back(modelMat);
 				scene.naniteObjects.emplace_back(instance);
@@ -1026,6 +1043,8 @@ public:
 
 		setLayoutBindings = {
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
 		};
 		manager->addSetLayout("clearImage", setLayoutBindings, 1);
 
@@ -1155,7 +1174,7 @@ public:
 		clustersInfoBuffer.setupDescriptor();
 		HWRIndicesBuffer.setupDescriptor();
 		HWRIDBuffer.setupDescriptor();
-		drawIndexedIndirectBuffer.setupDescriptor();
+		hwrDrawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		projectedErrorBuffer.setupDescriptor();
 		SWRIndicesBuffer.setupDescriptor();
@@ -1169,7 +1188,7 @@ public:
 		manager->writeToSet("culling", 0, 0, &clustersInfoBuffer.descriptor);
 		manager->writeToSet("culling", 0, 1, &inputIndicesInfo);
 		manager->writeToSet("culling", 0, 2, &HWRIndicesBuffer.descriptor);
-		manager->writeToSet("culling", 0, 3, &drawIndexedIndirectBuffer.descriptor);
+		manager->writeToSet("culling", 0, 3, &hwrDrawIndexedIndirectBuffer.descriptor);
 		manager->writeToSet("culling", 0, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
@@ -1198,6 +1217,7 @@ public:
 		VkDescriptorImageInfo SWRImageInfo = {};
 		SWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		SWRImageInfo.imageView = SWRBuffer.view;
+		swrIndirectDispatchBuffer.setupDescriptor();
 		manager->writeToSet("swRast", 0, 0, &inputVertInfo);
 		manager->writeToSet("swRast", 0, 1, &SWRIndicesBuffer.descriptor);
 		manager->writeToSet("swRast", 0, 2, &modelMatsBuffer.descriptor);
@@ -1208,6 +1228,8 @@ public:
 
 		//Clear image
 		manager->writeToSet("clearImage", 0, 0, &SWRImageInfo);
+		manager->writeToSet("clearImage", 0, 1, &swrNumVerticesBuffer.descriptor);
+		manager->writeToSet("clearImage", 0, 2, &swrIndirectDispatchBuffer.descriptor);
 
 		//Merge Rasterization Result
 		VkDescriptorImageInfo HWRImageInfo = {};
@@ -2553,33 +2575,42 @@ public:
 		cullingUniformBuffer.device = device;
 		VK_CHECK_RESULT(cullingUniformBuffer.map());
 
-		drawIndexedIndirect.firstIndex = 0;
-		drawIndexedIndirect.firstInstance = 0;
-		drawIndexedIndirect.indexCount = models.object.indexBuffer.size();
+		hwrDrawIndexedIndirect.firstIndex = 0;
+		hwrDrawIndexedIndirect.firstInstance = 0;
+		hwrDrawIndexedIndirect.indexCount = models.object.indexBuffer.size();
 		//drawIndexedIndirect.indexCount = naniteMesh.meshes[naniteMesh.meshes.size()-1].mesh.n_faces();
-		drawIndexedIndirect.instanceCount = 2;
-		drawIndexedIndirect.vertexOffset = 0;
+		hwrDrawIndexedIndirect.instanceCount = 2;
+		hwrDrawIndexedIndirect.vertexOffset = 0;
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			sizeof(DrawIndexedIndirect),
-			&drawIndexedIndirectBuffer.buffer,
-			&drawIndexedIndirectBuffer.memory,
-			&drawIndexedIndirect));
+			&hwrDrawIndexedIndirectBuffer.buffer,
+			&hwrDrawIndexedIndirectBuffer.memory,
+			&hwrDrawIndexedIndirect));
 
-		drawIndexedIndirectBuffer.device = device;
-		VK_CHECK_RESULT(drawIndexedIndirectBuffer.map());
+		hwrDrawIndexedIndirectBuffer.device = device;
+		VK_CHECK_RESULT(hwrDrawIndexedIndirectBuffer.map());
 
-		uint32_t num_vertices = 0;
 
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			sizeof(SWRIndirectBuffer),
+			&swrIndirectDispatchBuffer.buffer,
+			&swrIndirectDispatchBuffer.memory,
+			nullptr));
+
+
+		uint32_t num_verts = 0;
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			sizeof(uint32_t),
 			&swrNumVerticesBuffer.buffer,
 			&swrNumVerticesBuffer.memory,
-			&num_vertices));
+			&num_verts));
 
 		swrNumVerticesBuffer.device = device;
 		VK_CHECK_RESULT(swrNumVerticesBuffer.map());
@@ -2848,7 +2879,7 @@ public:
 
 		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageCI.imageType = VK_IMAGE_TYPE_2D;
-		imageCI.format = VK_FORMAT_R64_SINT;
+		imageCI.format = VK_FORMAT_R64_UINT;
 		imageCI.extent = { width, height, 1 };
 		imageCI.mipLevels = 1;
 		imageCI.arrayLayers = 1;
@@ -2868,7 +2899,7 @@ public:
 		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		imageViewCI.image = SWRBuffer.image;
-		imageViewCI.format = VK_FORMAT_R64_SINT;
+		imageViewCI.format = VK_FORMAT_R64_UINT;
 		imageViewCI.subresourceRange.baseMipLevel = 0;
 		imageViewCI.subresourceRange.levelCount = 1;
 		imageViewCI.subresourceRange.baseArrayLayer = 0;
@@ -3157,17 +3188,17 @@ public:
 	{
 		VulkanExampleBase::prepareFrame();
 
-		if (drawIndexedIndirectBuffer.mapped)
+		if (hwrDrawIndexedIndirectBuffer.mapped)
 		{
 			//
-			drawIndexedIndirect.indexCount = 0;
-			memcpy(drawIndexedIndirectBuffer.mapped, &drawIndexedIndirect, sizeof(DrawIndexedIndirect));
-			drawIndexedIndirectBuffer.flush();
+			hwrDrawIndexedIndirect.indexCount = 0;
+			memcpy(hwrDrawIndexedIndirectBuffer.mapped, &hwrDrawIndexedIndirect, sizeof(DrawIndexedIndirect));
+			hwrDrawIndexedIndirectBuffer.flush();
 
-			uint32_t numVertices = 0;
-			memcpy(swrNumVerticesBuffer.mapped, &numVertices, sizeof(uint32_t));
+			uint32_t zero = 0;
+			memcpy(swrNumVerticesBuffer.mapped, &zero, sizeof(uint32_t));
 			swrNumVerticesBuffer.flush();
-			//vkDeviceWaitIdle(device);
+			vkDeviceWaitIdle(device);
 		}
 
 		uboCullingMatrices.currView = camera.matrices.view;

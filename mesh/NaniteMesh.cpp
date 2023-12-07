@@ -107,7 +107,7 @@ void NaniteMesh::flattenBVH()
 		std::string indent(currNode->depth, '\t');
 		ASSERT(currNode->nodeStatus != NaniteBVHNodeStatus::INVALID, "Invalid node!");
 
-		std::cout << indent << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") << currNode->depth << " " << currNode->index << std::endl;
+		//std::cout << indent << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") << currNode->depth << " " << currNode->index << std::endl;
 		//ASSERT(currNode->depth <= depthCounts.size(), "currNode->level should never be greater than size of depthCounts, check traversal implementation");
 		if (currNode->depth == depthCounts.size())
 		{
@@ -134,7 +134,7 @@ void NaniteMesh::flattenBVH()
 			//    std::endl;
 			for (auto child : currNode->children)
 			{
-				std::cout << indent << child->depth << std::endl;
+				//std::cout << indent << child->depth << std::endl;
 				nodeQueue.push(child);
 			}
 		}
@@ -166,12 +166,18 @@ void NaniteMesh::flattenBVH()
 		nodeInfo.depth = currNode->depth;
 		nodeInfo.index = currNode->index;
 		nodeInfo.clusterIndices = currNode->clusterIndices;
+		nodeInfo.lodLevel = currNode->lodLevel;
 		ASSERT(flattenedBVHNodeInfos[currNode->index].nodeStatus == INVALID, "Repeated index!");
 		ASSERT(currNode->index < flattenedBVHNodeInfos.size(), "index over flattenedBVHNodeInfos.size()");
 		nodeQueue.pop();
 		if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
 		{
 			ASSERT(currNode->clusterIndices.size() <= CLUSTER_GROUP_MAX_SIZE, "cluster group size over threshold!");
+			//for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
+			//{
+			//	std::cout << std::string(currNode->depth, '\t') << "nodeInfo: " << nodeInfo.clusterIndices[i] << std::endl;
+			//	std::cout << std::string(currNode->depth, '\t') << "currNode: " << currNode->clusterIndices[i] << std::endl;
+			//}
 			//std::cout << "Leaf node: " <<
 			//	"pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
 			//	"pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
@@ -304,11 +310,6 @@ void NaniteMesh::serialize(const std::string& filepath)
 	}
 	for (size_t i = 0; i < flattenedBVHNodeInfos.size(); i++)
 	{
-		//std::cout << "flattenedBVHNodeInfos index: " << flattenedBVHNodeInfos[i].index << std::endl;
-		if (flattenedBVHNodeInfos[i].nodeStatus == LEAF) {
-			std::cout << "flattenedBVHNodeInfos cluster sizes: " << flattenedBVHNodeInfos[i].clusterIndices.size() << std::endl;
-		}
-
 		result["flattenedBVHNodeInfos"][i] = flattenedBVHNodeInfos[i].toJson();
 	}
 	result["flattenedBVHNodeCounts"] = flattenedBVHNodeInfos.size();
@@ -352,7 +353,14 @@ void NaniteMesh::deserialize(const std::string & filepath)
 	for (int i = 0; i < flattenedBVHNodeCounts; ++i) {
 		auto& nodeInfo = flattenedBVHNodeInfos[i];
 		nodeInfo.fromJson(loadedJson["flattenedBVHNodeInfos"][i]);
-		//std::cout << nodeInfo.index << std::endl;
+		std::string indent(nodeInfo.depth, '\t');
+		//if (nodeInfo.nodeStatus == LEAF) {
+		//	std::cout << "Index: " << nodeInfo.index << std::endl;
+		//	for (size_t i = 0; i < nodeInfo.clusterIndices.size(); i++)
+		//	{
+		//		std::cout << '\t' << nodeInfo.clusterIndices[i] << std::endl;
+		//	}
+		//}
 		float percentage = static_cast<float>(i + 1) / flattenedBVHNodeCounts * 100.0;
 		std::cout << "\r";
 		std::cout << "[Loading] BVH Info: " << std::fixed << std::setw(6) << std::setprecision(2) << percentage << "%";

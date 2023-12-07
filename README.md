@@ -288,3 +288,56 @@ Multiple mesh 现在的问题：
 	似乎我对于这个里面的BVH过度理解了，它所说的BVH似乎就是对每个LOD各自都构建一个BVH？
 	那么workthread如何判断的呢？
 	先判断LOD0，如果
+
+12.4
+
+BVH Traversal
+
+- First we should write something like this
+
+```cpp
+
+VkBuffer allNodeInfos;
+VkBuffer currNodeInfoList;
+VkBuffer nextNodeInfoList;
+
+VkPipeline bvhTraversePipeline;
+VkPipelineLayout bvhTraversePipelineLayout;
+
+1. Create buffer;
+2. Create descriptor set & layout with buffer;
+3. Create pipeline layout with descriptor layout;
+4. Write shader of traversing
+	4-a. Before traversing, push virtual node in.
+	4-b. Do traversal. Co valid chilren into nextNodeInfoList;
+	4-c. Swap currNodeInfoList & nextNodeInfoList. CLEAR currNodeInfoList;
+	4-d. 
+5. Creaete buffer barrier between traverse and culling;
+
+
+// We need two descriptor layout? to do swapchain? 
+// Or even worse, we might need two pipeline?
+
+struct TraverseJob
+{
+	uint32_t level;
+	uint32_t nodeStart;
+	uint32_t nodeCount;
+};
+
+void traverseBVH()
+{
+	for	(i < maxLevel)
+	{
+		TraverseJob job;
+		job.level = i;
+		job.nodeStart = 
+	}
+}
+
+void traverseCurrLevel(TraverseJob & job);
+
+```
+
+12.5
+TODO: 看Instance以及NaniteScene，看下是lod层的offset出问题了还是object层的offset出问题了

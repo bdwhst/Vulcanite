@@ -569,7 +569,7 @@ public:
 		models.object.loadFromFile(getAssetPath() + "models/bunny.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		naniteMesh.setModelPath((getAssetPath() + "models/bunny/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf", false);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
 
 		for (int i = 0; i < naniteMesh.meshes.size(); i++)
 		{

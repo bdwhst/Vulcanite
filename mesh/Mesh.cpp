@@ -899,6 +899,7 @@ void Mesh::buildBVH()
     rootBVHNode->start = 0;
     rootBVHNode->end = clusterGroups.size();
     rootBVHNode->nodeStatus = NaniteBVHNodeStatus::NODE;
+    rootBVHNode->lodLevel = lodLevel;
     nodeStack.push(rootBVHNode);
 
     std::set<int> clusterIndexSet;
@@ -913,6 +914,7 @@ void Mesh::buildBVH()
     while (!nodeStack.empty()) 
     {
         auto & currNode = nodeStack.top();
+        currNode->lodLevel = lodLevel;
         for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
         {
             currNode->clusterIndices[i] = -1;
@@ -936,7 +938,7 @@ void Mesh::buildBVH()
             for (auto clusterIndex: currNode->clusterIndices)
             {
                 // TODO: Make sure this part uses the right error
-                std::cout <<indent << "clusterIndex: " << clusterIndex << " clusters.size(): " << clusters.size() << std::endl;
+                //std::cout <<indent << "clusterIndex: " << clusterIndex << " clusters.size(): " << clusters.size() << std::endl;
                 ASSERT(clusterIndex < int(clusters.size()), "clusterIndex overflow");
                 if (clusterIndex >= 0) {
                     ASSERT(clusterIndexSet.find(clusterIndex) != clusterIndexSet.end(), "clusterIndex not found in clusterIndexSet, means it's repeated!");

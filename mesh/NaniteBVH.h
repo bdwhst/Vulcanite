@@ -28,6 +28,21 @@ enum NaniteBVHNodeStatus
 
 struct NaniteBVHNode
 {
+	NaniteBVHNode():
+		normalizedlodError(-FLT_MAX),
+		parentNormalizedError(-FLT_MAX),
+		index(-1),
+		pMin(glm::vec3(FLT_MAX)),
+		pMax(glm::vec3(-FLT_MAX)), 
+		nodeStatus(INVALID),
+		start(-1),
+		end(-1),
+		depth(0)
+		{
+			objectIdx = -1; // Only useful in instancing
+			lodLevel = -1;
+			for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++) clusterIndices[i] = -1; // The non-default initialization
+		}
 	std::vector<std::shared_ptr<NaniteBVHNode>> children; // should be a fixed size
 	double normalizedlodError = -FLT_MAX;
 	double parentNormalizedError = -FLT_MAX;
@@ -43,7 +58,8 @@ struct NaniteBVHNode
 	//std::vector<uint32_t> clusterIndices; 
 	std::array<int, CLUSTER_GROUP_MAX_SIZE> clusterIndices; // should try to assert index overflow
 	
-	uint32_t objectId = -1; // Only useful in instancing
+	int objectIdx = -1; // Only useful in instancing
+	int lodLevel = -1; 
 };
 
 /*
@@ -63,6 +79,7 @@ struct NaniteBVHNodeInfo
 	std::array<int, CLUSTER_GROUP_MAX_SIZE> clusterIndices; // should try to assert index overflow
 	NaniteBVHNodeStatus nodeStatus = NaniteBVHNodeStatus::INVALID;
 	uint32_t depth = 0;
+	int lodLevel = -1;
 
 	json toJson() {
 		return {
@@ -75,6 +92,7 @@ struct NaniteBVHNodeInfo
 			{"clusterIndices", clusterIndices},
 			{"nodeStatus", nodeStatus},
 			{"depth", depth},
+			{"lodLevel", lodLevel}
 		};
 	}
 
@@ -121,6 +139,9 @@ struct NaniteBVHNodeInfo
 
 		ASSERT(j.find("depth") != j.end(), "depth not found");
 		depth = j["depth"].get<uint32_t>();
+
+		ASSERT(j.find("lodLevel") != j.end(), "lodLevel not found");
+		lodLevel = j["lodLevel"].get<int>();
 	}
 };
 

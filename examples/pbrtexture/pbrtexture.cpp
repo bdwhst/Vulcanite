@@ -204,7 +204,8 @@ public:
 	struct CullingPushConstants {
 		int numClusters;
 		float threshold;
-		bool useFrustrumOcclusionCulling = true;
+		alignas(4) bool useFrustrumOcclusionCulling = true;
+		alignas(4) bool useSoftwareRasterization = true;
 	} cullingPushConstants;
 
 	struct RenderingPushConstants {
@@ -616,6 +617,7 @@ public:
 			*  Merge Rasterize results
 			*
 			*/
+			vkCmdPushConstants(drawCmdBuffers[i], mergeRastPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipelineLayout, 0, 1, &descManager->getSet("mergeRast", 0), 0, NULL);
 			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
@@ -1511,7 +1513,12 @@ public:
 		{
 			// Merge Rasterize result
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/merger.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			VkPushConstantRange push_constant{};
+			push_constant.size = sizeof(RenderingPushConstants);
+			push_constant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("mergeRast"), 1);
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &mergeRastPipelineLayout));
 
 			VkComputePipelineCreateInfo pipelineCreateInfo = {};
@@ -3497,6 +3504,9 @@ public:
 			if (overlay->checkBox("Top View", &vis_topView)) {
 				rebuildCB = true;
 			}
+			if (overlay->checkBox("Software Rasterization", &cullingPushConstants.useSoftwareRasterization)) {
+				rebuildCB = true;
+			}
 			if (overlay->checkBox("Frustrum&Occlusion Culling", &cullingPushConstants.useFrustrumOcclusionCulling)) {
 				rebuildCB = true;
 			}
@@ -3504,7 +3514,7 @@ public:
 			{
 				rebuildCB = true;
 			}
-			if (overlay->sliderInt("Visualize Clusters", &renderingPushConstants.vis_clusters,0,2)) {
+			if (overlay->sliderInt("Visualize Clusters", &renderingPushConstants.vis_clusters,0,3)) {
 				rebuildCB = true;
 			}
 			if (overlay->sliderInt("LOD level", &vis_clusters_level, 0, naniteMesh.meshes.size() - 1))

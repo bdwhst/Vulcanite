@@ -70,6 +70,7 @@ layout(push_constant) uniform PushConstants {
     int numClusters;
     float threshold;
     int useFrustrumOcclusion;
+    int useSoftwareRast;
 } pcs;
 
 // Naive AABB compute
@@ -244,7 +245,7 @@ void main()
         pixelArea = screenSpan.x*screenSpan.y;
     }
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
-    bool useSWR = pixelArea<256.0;
+    bool useSWR = pcs.useSoftwareRast==1?pixelArea<256.0:false;
     //bool useSWR = true;
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;

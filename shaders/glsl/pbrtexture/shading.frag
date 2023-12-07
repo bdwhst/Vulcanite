@@ -85,7 +85,8 @@ vec3 getBarycentricCoord(vec3 center, vec3 v0, vec3 v1, vec3 v2)
 
 #define PI 3.1415926535897932384626433832795
 //#define ALBEDO pow(texture(albedoMap, inUV).rgb, vec3(2.2))
-#define ALBEDO vec3(0.5)
+//#define ALBEDO vec3(0.5)
+
 // From http://filmicgames.com/archives/75
 vec3 Uncharted2Tonemap(vec3 x)
 {
@@ -138,7 +139,7 @@ vec3 prefilteredReflection(vec3 R, float roughness)
 	return mix(a, b, lod - lodf);
 }
 
-vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float roughness)
+vec3 specularContribution(vec3 L, vec3 V, vec3 N, vec3 F0, float metallic, float roughness, vec3 ALBEDO)
 {
 	// Precalculate vectors and dot products	
 	vec3 H = normalize (V + L);
@@ -230,6 +231,7 @@ void main()
     uint v0i = inTriangles[globalTriangleID*3+0];
     uint v1i = inTriangles[globalTriangleID*3+1];
     uint v2i = inTriangles[globalTriangleID*3+2];
+	vec3 ALBEDO = vec3(0.5);
 	if(pcs.vis_clusters==2)
 	{
 		visualizeID(ID); 
@@ -250,6 +252,11 @@ void main()
 			outColor = vec4(vec3(1.0,0.0,1.0),1.0);
 		else 
 			outColor = vec4(vec3(0.0,1.0,1.0),1.0);
+		return;
+	}
+	else if(pcs.vis_clusters==3)
+	{
+		outColor = vec4(vec3(ID*0.5+0.25),1.0);
 		return;
 	}
 	// outColor = vec4(vec3(triangleID/(0xFF*1.0)),1.0);
@@ -282,7 +289,7 @@ void main()
 	vec3 Lo = vec3(0.0);
 	for(int i = 0; i < uboParams.lights[i].length(); i++) {
 		vec3 L = normalize(uboParams.lights[i].xyz - worldPos.xyz);
-		Lo += specularContribution(L, V, N, F0, metallic, roughness);
+		Lo += specularContribution(L, V, N, F0, metallic, roughness, ALBEDO);
 	}   
 	
 	vec2 brdf = texture(samplerBRDFLUT, vec2(max(dot(N, V), 0.0), roughness)).rg;

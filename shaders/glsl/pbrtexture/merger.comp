@@ -12,6 +12,10 @@ layout(set = 0, binding = 2, r64ui) uniform u64image2D swrDepthVisBuffer;
 layout(set = 0, binding = 3, r32f) uniform image2D finalDepthBuffer;
 layout(set = 0, binding = 4, r32ui) uniform uimage2D finalVisBuffer;
 
+layout(push_constant) uniform PushConstants {
+    int vis_clusters;
+} pcs;
+
 
 void main()
 {
@@ -23,10 +27,11 @@ void main()
     uint hwrVis = imageLoad(hwrVisBuffer,index).x;
     uint64_t swrDepthVis = imageLoad(swrDepthVisBuffer,index).x;
     bool swrValid = !(swrDepthVis==0x0000000000000000UL);
+    bool hwrValid = hwrVis!=0xFFFFFFFF;
     float swrDepth = swrValid?1.0-uintBitsToFloat(uint(((uint64_t(swrDepthVis&0xFFFFFFFF00000000UL))>>32))):1.0;
     uint swrVis = swrValid?uint(swrDepthVis&0xFFFFFFFF):0xFFFFFFFF;
     float finalDepth = swrDepth<hwrDepth?swrDepth:hwrDepth;
-    uint finalVis = swrDepth<hwrDepth?swrVis:hwrVis;
+    uint finalVis = pcs.vis_clusters!=3?(swrDepth<hwrDepth?swrVis:hwrVis):(swrValid||hwrValid?uint(swrDepth<hwrDepth):0xFFFFFFFF);
 
     imageStore(finalDepthBuffer,index,vec4(finalDepth));
     imageStore(finalVisBuffer,index,uvec4(finalVis));

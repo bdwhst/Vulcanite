@@ -1,0 +1,92 @@
+#version 450
+
+#define WORKGROUP_SIZE 32
+
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define CLUSTER_GROUP_MAX_SIZE 32
+
+struct BVHNodeInfo{
+    vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
+    vec3 pMinWorld;
+    vec3 pMaxWorld;
+    ivec4 childrenNodeIndices;
+    int clusterIndices[CLUSTER_GROUP_MAX_SIZE]; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices0; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices1; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices2; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices3; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices4; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices5; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices6; // if clusterIndices[0] == -1, then this node is not a leaf node
+    //ivec4 clusterIndices7; // if clusterIndices[0] == -1, then this node is not a leaf node
+};
+
+struct BVHNodeInfoPass{
+    int nodeInfoNum;
+};
+
+layout(std430, binding = 0) buffer BVHNodeInfoBuffer{
+	BVHNodeInfo bvhNodeInfos[];
+};
+
+layout(std430, binding = 1) buffer currBVHNodes{
+    uint currBvhNodeInfoSize;
+    uint currBVHNodeInfoIndices[]; // Use first element as the size of bvh node info
+};
+
+layout(std430, binding = 2) buffer nextBVHNodes{
+    uint nextBvhNodeInfoSize;
+    uint nextBVHNodeInfoIndices[]; // Use first element as the size of bvh node info
+};
+
+layout(std430, binding = 3) buffer clusterIndexBuffer{
+    uint clusterSize; 
+	uint clusters[]; // Use first element as the size of clusters
+};
+
+bool frustumCulling(){
+    return false;
+}
+
+bool occlusionCulling(){
+    return false;
+}
+
+void main(){
+	if(gl_GlobalInvocationID.x >= currBvhNodeInfoSize) return;
+	BVHNodeInfo nodeInfo = bvhNodeInfos[currBVHNodeInfoIndices[gl_GlobalInvocationID.x]];
+    // frustum culling & occlusion culling
+    bool culled = false;
+
+    // error culling
+
+    // output to nextBVHNodeInfoIndices
+
+    if (culled) return;
+
+    // output to clusterIndexBuffer
+    //bool isLeaf = nodeInfo.clusterIndices[0] == -1;
+    //if (isLeaf){
+    //    // TODO: Optimization
+	//	for(int i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++){
+	//		if(nodeInfo.clusterIndices[i] == -1) return;
+    //        else{
+    //            uint index = atomicAdd(clusterSize, 1);
+	//		    clusters[index] = nodeInfo.clusterIndices[i];
+    //        }
+	//	}
+	//}
+    //else
+    {
+        // TODO: Optimization
+        // push children indices into nextBVHNodeInfoIndices
+        for(int i = 0; i < 4; i++){
+			if(nodeInfo.childrenNodeIndices[i] == -1) return;
+            else{
+			    uint index = atomicAdd(nextBvhNodeInfoSize, 1);
+			    nextBVHNodeInfoIndices[index] = nodeInfo.childrenNodeIndices[i];
+            }
+		}
+    }
+}

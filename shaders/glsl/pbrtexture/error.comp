@@ -26,6 +26,10 @@ layout(set = 0, binding = 2) uniform UBOMats {
     vec3 camRight;
 } ubomats;
 
+layout(set = 0, binding = 3) buffer ClusterIndices{
+    uint culledClusterSize;
+    uint culledClusterIndices[];
+} culledClusters;
 
 layout(push_constant) uniform PushConstants {
     int numClusters;
@@ -51,8 +55,10 @@ float getScreenBoundRadiusSq(vec3 center, float R)
 
 void main()
 {
-    uint index = gl_GlobalInvocationID.x;
-    if(index >= pcs.numClusters) return;
+    //uint index = gl_GlobalInvocationID.x;
+    //if(index >= pcs.numClusters) return;
+    if (gl_GlobalInvocationID.x >= culledClusters.culledClusterSize) return;
+    uint index = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
     ErrorInfo error = idata[index];
     vec3 center;
     float R;

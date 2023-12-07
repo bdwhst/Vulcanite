@@ -22,6 +22,7 @@ void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue tra
         indexOffsets[i] = indexOffset;
         indexCounts[i] = instance.indexBuffer.size();
         indexOffset += instance.vertexBuffer.size();
+        maxLodLevelNum = glm::max(maxLodLevelNum, instance.referenceMesh->lodNums);
     }
 
     size_t vertexBufferSize = vertexBuffer.size() * sizeof(vkglTF::Vertex);
@@ -105,6 +106,7 @@ void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue tra
 void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transferQueue)
 {
     sceneIndicesCount = 0;
+    maxClusterNums = 0;
     clusterIndexOffsets.resize(naniteObjects.size());
     for (int i = 0; i < naniteObjects.size(); ++i) {
         auto& naniteObject = naniteObjects[i];
@@ -125,6 +127,7 @@ void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transfer
         }
         errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
         sceneIndicesCount += indexCounts[referenceMeshIndex];
+        maxClusterNums += naniteObject.referenceMesh->meshes[0].clusterNum;
     }
 }
 
@@ -133,7 +136,7 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
 
     virtualRootNode = std::make_shared<NaniteBVHNode>();
     virtualRootNode->nodeStatus = VIRTUAL_NODE;
-    virtualRootNode->depth = 0;
+    //virtualRootNode->depth = 0;
     for (int i = 0; i < naniteObjects.size(); ++i) {
         auto& naniteObject = naniteObjects[i];
         naniteObject.reconstructBVH();
@@ -176,7 +179,7 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
             if (currNode != virtualRootNode) {
                 child->objectIdx = currNode->objectIdx;
             }
-            child->depth = currNode->depth + 1;
+            //child->depth = currNode->depth + 1;
             nodeQueue.push(child);
         }
     }
@@ -188,25 +191,24 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
     {
         clusterIndexSets.insert(i);
     }
-    nodeInfos.resize(flattenedNonVirtualNodes.size());
-    int depth = 0;
-    std::vector<uint32_t> depthCounts;
+    bvhNodeInfos.resize(flattenedNonVirtualNodes.size());
+
     for (size_t i = 0; i < flattenedNonVirtualNodes.size(); i++)
     {
         auto& currNode = flattenedNonVirtualNodes[i];
 
-        currNode->depth -= 2; // Because we will cut out all virtual nodes from now on
         std::string indent(currNode->depth, '\t');
-        //std::cout << indent 
-        //    << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") 
-        //    << currNode->depth << " " 
-        //    << currNode->index << " " 
-        //    << currNode->objectIdx << " "
-        //    << std::endl;
+        std::cout << indent 
+            << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") 
+            << currNode->depth << " " 
+            << currNode->index << " " 
+            << currNode->objectIdx << " "
+            << std::endl;
+        
         //ASSERT(currNode->nodeStatus == VIRTUAL_NODE && currNode->depth >= 0, "A non-virtual node should now be cut out from the bvh tree");
         //ASSERT(currNode->nodeStatus != VIRTUAL_NODE && currNode->depth < 0, "A virtual node should not be cut out from the bvh tree");
         
-        auto & nodeInfo = nodeInfos[i];
+        auto & nodeInfo = bvhNodeInfos[i];
         nodeInfo.pMinWorld = currNode->pMin;
         nodeInfo.pMaxWorld = currNode->pMax;
         nodeInfo.errorWorld.x = currNode->parentNormalizedError;
@@ -223,7 +225,22 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         // TODO: Use memcpy
         for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
         {
-            nodeInfo.clusterIndices[i] = currNode->clusterIndices[i] + clusterIndexOffsets[currNode->objectIdx];
+            if (currNode->clusterIndices[i] >= 0) {
+                nodeInfo.clusterIndices[i] = currNode->clusterIndices[i] + clusterIndexOffsets[currNode->objectIdx];
+            }
+        }
+        ASSERT(currNode->nodeStatus == LEAF || nodeInfo.clusterIndices[0] == -1, "A non-leaf node should have no cluster index");
+        //std::cout << indent << "object: " << currNode->objectIdx
+        //    << " lod: " << currNode->lodLevel
+        //    << " depth: " << currNode->depth << std::endl;
+        ASSERT(currNode->depth <= depthCounts.size(), "`depth` should never be over depthCounts.size()");
+        if (currNode->depth == depthCounts.size())
+        {
+            depthCounts.push_back(1);
+        }
+        else
+        {
+            depthCounts[currNode->depth] += 1;
         }
         if (currNode->nodeStatus == LEAF)
         {
@@ -233,15 +250,12 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
             // Final check
             for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
             {
-                std::cout << indent << currNode->clusterIndices[i] << std::endl;
                 if (currNode->clusterIndices[i] >= 0) {
                     ASSERT(isValid, "Invalid cluster indices"); // This assertion is to make sure that all cluster indices are allocated contiguously
 					validClusterIndicesSize += 1;
-                    std::cout << indent << "object: " << currNode->objectIdx 
-                        << " lod: " << currNode->lodLevel
-                        << " depth: " << currNode->depth
-                        << " cluster: " << nodeInfo.clusterIndices[i]
-                        << std::endl;
+					//std::cout << indent
+                    //    << " cluster: " << nodeInfo.clusterIndices[i]
+                    //    << std::endl;
                     ASSERT(clusterIndexSets.find(nodeInfo.clusterIndices[i]) != clusterIndexSets.end(), "Already removed, repeat index!");
                     clusterIndexSets.erase(nodeInfo.clusterIndices[i]);
 				}
@@ -249,18 +263,30 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
                     isValid = false;
                 }
             }
-            std::cout << indent << "Curr leaf node clusterIndices size: " << validClusterIndicesSize << std::endl;
+            //std::cout << indent << "Curr leaf node clusterIndices size: " << validClusterIndicesSize << std::endl;
         }
-        ASSERT(currNode->depth <= depthCounts.size(), "`depth` should never be over depthCounts.size()");
-        if (currNode->depth == depthCounts.size())
-        {
-            depthCounts.push_back(1);
-        }
-        else 
-        {
-            depthCounts[depth] += 1;
-        }
+        std::cout << indent << "nodeInfo.clusterIndices[0]: " << nodeInfo.clusterIndices[0] << std::endl;
+        //for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
+        //{
+        //    std::cout << indent << "clusterIndex: " << currNode->clusterIndices[i] << std::endl;
+        //    std::cout << indent << "clusterIndex + offset: " << nodeInfo.clusterIndices[i] << std::endl;
+        //}
     }
 
     ASSERT(clusterIndexSets.size() == 0, "Some clusters are not covered");
+    for (size_t i = 0; i < depthCounts.size(); i++)
+    {
+        std::cout << "i: " << i << " depthCounts[i]: " << depthCounts[i] << std::endl;
+    }
+    std::cout << alignof(BVHNodeInfo) << std::endl;
+    std::cout << sizeof(BVHNodeInfo) << std::endl;
+    //ASSERT(0, "Stop here");
+    maxDepthCounts = std::max_element(depthCounts.begin(), depthCounts.end())[0];
+    
+    initNodeInfoIndices.resize(depthCounts[0] + 1); // Init node info indices by depth 0 node count
+    initNodeInfoIndices[0] = depthCounts[0];
+    for (size_t i = 1; i <= depthCounts[0]; i++)
+    {
+        initNodeInfoIndices[i] = i-1;
+    }
 }

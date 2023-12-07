@@ -11,11 +11,20 @@
 //  Some meta information about bvh should also be stored (in a uniform buffer)
 //      Node count of each level (At least we should know the node count of level 0 to initiate traversal)
 struct BVHNodeInfo {
+    BVHNodeInfo() : pMinWorld(FLT_MAX), pMaxWorld(-FLT_MAX), childrenNodeIndices(-1), errorWorld(FLT_MAX)
+    {
+        for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
+        {
+			clusterIndices[i] = -1;
+		}
+    }
+    alignas(8)  glm::vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
     alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
     alignas(16) glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
     alignas(16) glm::ivec4 childrenNodeIndices;
-    alignas(CLUSTER_GROUP_MAX_SIZE * 4) int clusterIndices[CLUSTER_GROUP_MAX_SIZE]; // if clusterIndices[0] == -1, then this node is not a leaf node
-    alignas(8)  glm::vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
+    // Note: The annotated one is wrong!
+    //alignas(CLUSTER_GROUP_MAX_SIZE * 4) int clusterIndices[CLUSTER_GROUP_MAX_SIZE];
+    alignas(16) int clusterIndices[CLUSTER_GROUP_MAX_SIZE]; // if clusterIndices[0] == -1, then this node is not a leaf node
 };
 
 //ClusterInfo for drawing
@@ -306,9 +315,9 @@ struct Instance {
         for (size_t i = 1; i < clusterIndexOffset.size(); i++)
         {
             clusterIndexOffset[i] = clusterIndexOffset[i - 1] + referenceMesh->meshes[i-1].clusterNum;
-            std::cout << "Lod: " << i << std::endl;
-            std::cout << "ClusterIndexOffset: " << clusterIndexOffset[i] << std::endl;
-            std::cout << "ClusterNum: " << referenceMesh->meshes[i].clusterNum << std::endl;
+            //std::cout << "Lod: " << i << std::endl;
+            //std::cout << "ClusterIndexOffset: " << clusterIndexOffset[i] << std::endl;
+            //std::cout << "ClusterNum: " << referenceMesh->meshes[i].clusterNum << std::endl;
         }
         std::unordered_set<uint32_t> clusterIndexSet;
         uint32_t totalClusterNum = clusterIndexOffset.back() + referenceMesh->meshes.back().clusterNum;
@@ -357,8 +366,8 @@ struct Instance {
             }
             ASSERT(currNode->nodeStatus != INVALID, "Invalid nodes!");
 
-            //std::string indent(nodeInfo.depth, '\t');
-            //std::cout << indent << (flattenedBVHNodes[i]->nodeStatus == LEAF ? "Leaf " : "Non-leaf ")
+            std::string indent(nodeInfo.depth, '\t');
+            //std::cout << indent << (flattenedBVHNodes[i]->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
             //    << flattenedBVHNodes[i]->index << " "
             //    << flattenedBVHNodes[i]->depth << " " << std::endl;
         }

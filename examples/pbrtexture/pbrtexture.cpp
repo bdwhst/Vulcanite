@@ -51,6 +51,9 @@ public:
 	VkPipelineLayout debugQuadPipelineLayout;
 	VkPipeline debugQuadPipeline;
 
+	VkPipelineLayout bvhTraversalPipelineLayout;
+	VkPipeline bvhTraversalPipeline;
+
 	VkPipelineLayout cullingPipelineLayout;
 	VkPipeline cullingPipeline;
 
@@ -154,6 +157,12 @@ public:
 	struct RenderingPushConstants {
 		int vis_clusters;
 	} renderingPushConstants;
+
+	vks::Buffer bvhNodeInfosBuffer;
+	vks::Buffer initNodeInfosBuffer;
+	vks::Buffer currNodeInfosBuffer;
+	vks::Buffer nextNodeInfosBuffer;
+	vks::Buffer culledClusterIndicesBuffer; // Cluster indices after BVH culling
 
 	vks::Buffer culledIndicesBuffer;
 	vks::Buffer culledObjectIndicesBuffer;
@@ -271,7 +280,48 @@ public:
 
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
 
+
+			/*
+			* BVH Traversal
+			*/
+			//vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, culledClusterIndicesBuffer.size, 0);
+			//VkBufferCopy copyRegion = {};
+			//copyRegion.size = scene.initNodeInfoIndices.size() * sizeof(uint32_t);
+			//copyRegion.srcOffset = 0;
+			//copyRegion.dstOffset = 0;
+			//vkCmdCopyBuffer(drawCmdBuffers[i], initNodeInfosBuffer.buffer, currNodeInfosBuffer.buffer, 1, &copyRegion);
+			//
+			//vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, bvhTraversalPipeline);
+			//std::cout << drawCmdBuffers.size() << std::endl;
+			//for (size_t j = 0; j < scene.depthCounts.size(); j++)
+			//{
+			//	//std::cout << "i: " << i << " j: " << j << std::endl;
+			//	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, bvhTraversalPipelineLayout, 0, 1, &descManager->getSet("bvhTraversal", j & 1), 0, 0);
+			//	// TODO: Consider how to launch the compute shader
+			//	vkCmdDispatch(drawCmdBuffers[i], (scene.depthCounts[j] + 31) / 32, 1, 1);
+			//	VkBufferMemoryBarrier bufferBarrier = {};
+			//	bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			//	bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			//	bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			//	bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			//	bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			//	bufferBarrier.buffer = (j & 1) ? currNodeInfosBuffer.buffer : nextNodeInfosBuffer.buffer;
+			//	bufferBarrier.offset = 0;
+			//	bufferBarrier.size = VK_WHOLE_SIZE;
+			//	vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			//}
+
 			VkBufferMemoryBarrier bufferBarrier = {};
+			//bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			//bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			//bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			//bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			//bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			//bufferBarrier.buffer = culledClusterIndicesBuffer.buffer;
+			//bufferBarrier.offset = 0;
+			//bufferBarrier.size = VK_WHOLE_SIZE;
+			//vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -486,10 +536,6 @@ public:
 				models.cube.draw(drawCmdBuffers[i]);
 				vkCmdEndRenderPass(drawCmdBuffers[i]);
 			}
-
-
-			
-
 
 			/*
 			*  HZB build
@@ -707,10 +753,20 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4)
+		};
+		manager->addSetLayout("bvhTraversal", setLayoutBindings, 2);
+
+		setLayoutBindings = {
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 7),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 8),
 		};
 		manager->addSetLayout("culling", setLayoutBindings, 1);
 
@@ -718,6 +774,7 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 0),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
 		};
 		manager->addSetLayout("errorProj", setLayoutBindings, 1);
 
@@ -819,6 +876,21 @@ public:
 		manager->writeToSet("depthCopy", 0, 0, &depthImageInfo);
 		manager->writeToSet("depthCopy", 0, 1, &outputImageInfo);
 
+		//BVH Traversal
+		bvhNodeInfosBuffer.setupDescriptor();
+		currNodeInfosBuffer.setupDescriptor();
+		nextNodeInfosBuffer.setupDescriptor();
+		culledClusterIndicesBuffer.setupDescriptor();
+		manager->writeToSet("bvhTraversal", 0, 0, &bvhNodeInfosBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 1, &currNodeInfosBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 2, &nextNodeInfosBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 3, &culledClusterIndicesBuffer.descriptor);
+		
+		manager->writeToSet("bvhTraversal", 1, 0, &bvhNodeInfosBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 1, &nextNodeInfosBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 2, &currNodeInfosBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 3, &culledClusterIndicesBuffer.descriptor);
+
 		//Culling
 		clustersInfoBuffer.setupDescriptor();
 		culledIndicesBuffer.setupDescriptor();
@@ -837,6 +909,7 @@ public:
 		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
 		manager->writeToSet("culling", 0, 7, &culledObjectIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 8, &culledClusterIndicesBuffer.descriptor);
 
 		//Error projection
 		errorInfoBuffer.setupDescriptor();
@@ -845,6 +918,7 @@ public:
 		manager->writeToSet("errorProj", 0, 0, &errorInfoBuffer.descriptor);
 		manager->writeToSet("errorProj", 0, 1, &projectedErrorBuffer.descriptor);
 		manager->writeToSet("errorProj", 0, 2, &errorUniformBuffer.descriptor);
+		manager->writeToSet("errorProj", 0, 3, &culledClusterIndicesBuffer.descriptor);
 
 	}
 
@@ -968,6 +1042,19 @@ public:
 			pipelineCreateInfo.stage = computeShaderStage;
 			pipelineCreateInfo.layout = depthCopyPipelineLayout;
 			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &depthCopyPipeline));
+		}
+
+		{
+			// BVH Traversal pipeline
+			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/bvhtraversal.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("bvhTraversal"), 1);
+			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &bvhTraversalPipelineLayout));
+
+			VkComputePipelineCreateInfo pipelineCreateInfo = {};
+			pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+			pipelineCreateInfo.stage = computeShaderStage;
+			pipelineCreateInfo.layout = bvhTraversalPipelineLayout;
+			VK_CHECK_RESULT(vkCreateComputePipelines(device, pipelineCache, 1, &pipelineCreateInfo, nullptr, &bvhTraversalPipeline));
 		}
 
 		{
@@ -1970,6 +2057,109 @@ public:
 		std::cout << "Generating pre-filtered enivornment cube with " << numMips << " mip levels took " << tDiff << " ms" << std::endl;
 	}
 
+	void createBVHTraversalBuffers() {
+		//vks::Buffer bvhNodeInfosBuffer;
+		//vks::Buffer currNodeInfosBuffer;
+		//vks::Buffer nextNodeInfosBuffer;
+		//vks::Buffer culledClusterIndicesBuffer; // Cluster indices after BVH culling
+
+		{
+			vks::Buffer bvhNodeInfosStaging;
+			//std::cout << "size of clusterInfo:" << sizeof(ClusterInfo) << std::endl;
+
+			VK_CHECK_RESULT(vulkanDevice->createBuffer(
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				scene.bvhNodeInfos.size() * sizeof(BVHNodeInfo),
+				&bvhNodeInfosStaging.buffer,
+				&bvhNodeInfosStaging.memory,
+				scene.bvhNodeInfos.data()));
+
+			VK_CHECK_RESULT(vulkanDevice->createBuffer(
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				scene.bvhNodeInfos.size() * sizeof(BVHNodeInfo),
+				&bvhNodeInfosBuffer.buffer,
+				&bvhNodeInfosBuffer.memory,
+				nullptr));
+			VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+			VkBufferCopy copyRegion = {};
+
+			copyRegion.size = scene.bvhNodeInfos.size() * sizeof(BVHNodeInfo);
+			vkCmdCopyBuffer(copyCmd, bvhNodeInfosStaging.buffer, bvhNodeInfosBuffer.buffer, 1, &copyRegion);
+
+			vulkanDevice->flushCommandBuffer(copyCmd, queue, true);//TODO: get transfer queue here
+
+			vkDestroyBuffer(vulkanDevice->logicalDevice, bvhNodeInfosStaging.buffer, nullptr);
+			vkFreeMemory(vulkanDevice->logicalDevice, bvhNodeInfosStaging.memory, nullptr);
+
+			//std::cout << bvhNodeInfosBuffer.alignment << std::endl;
+			//std::cout << bvhNodeInfosBuffer.size << std::endl;
+			//std::cout << sizeof(BVHNodeInfo) << std::endl;
+			//std::cout << alignof(BVHNodeInfo) << std::endl;
+			//ASSERT(0, "Stop");
+		}
+
+		{
+
+			vks::Buffer initNodeInfosStaging;
+			//std::cout << "size of clusterInfo:" << sizeof(ClusterInfo) << std::endl;
+
+			VK_CHECK_RESULT(vulkanDevice->createBuffer(
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				scene.initNodeInfoIndices.size() * sizeof(uint32_t),
+				&initNodeInfosStaging.buffer,
+				&initNodeInfosStaging.memory,
+				scene.initNodeInfoIndices.data()));
+
+			VK_CHECK_RESULT(vulkanDevice->createBuffer(
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				scene.initNodeInfoIndices.size() * sizeof(uint32_t),
+				&initNodeInfosBuffer.buffer,
+				&initNodeInfosBuffer.memory,
+				nullptr));
+			VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+			VkBufferCopy copyRegion = {};
+
+			copyRegion.size = scene.initNodeInfoIndices.size() * sizeof(uint32_t);
+			vkCmdCopyBuffer(copyCmd, initNodeInfosStaging.buffer, initNodeInfosBuffer.buffer, 1, &copyRegion);
+
+			vulkanDevice->flushCommandBuffer(copyCmd, queue, true);//TODO: get transfer queue here
+
+			vkDestroyBuffer(vulkanDevice->logicalDevice, initNodeInfosStaging.buffer, nullptr);
+			vkFreeMemory(vulkanDevice->logicalDevice, initNodeInfosStaging.memory, nullptr);
+		}
+
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.maxDepthCounts * sizeof(uint32_t),
+			&currNodeInfosBuffer.buffer,
+			&currNodeInfosBuffer.memory,
+			nullptr));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.maxDepthCounts * sizeof(uint32_t),
+			&nextNodeInfosBuffer.buffer,
+			&nextNodeInfosBuffer.memory,
+			nullptr));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.maxClusterNums * sizeof(uint32_t),
+			&culledClusterIndicesBuffer.buffer,
+			&culledClusterIndicesBuffer.memory,
+			nullptr));
+	}
+
 	void createCullingBuffers()
 	{
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
@@ -2540,6 +2730,7 @@ public:
 		generateBRDFLUT();
 		generateIrradianceCube();
 		generatePrefilteredCube();
+		createBVHTraversalBuffers();
 		createCullingBuffers();
 		createErrorProjectionBuffer();
 		createHiZBuffer();

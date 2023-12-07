@@ -16,8 +16,14 @@ public:
 	vkglTF::Model::Indices indices;
 
 	std::shared_ptr<NaniteBVHNode> virtualRootNode; // The root node that connects all instances' root nodes
-	std::vector<BVHNodeInfo> nodeInfos; // cleaned version
+	std::vector<BVHNodeInfo> bvhNodeInfos; // cleaned version
 	std::vector<uint32_t> clusterIndexOffsets; 
+	std::vector<uint32_t> depthCounts;
+	std::vector<uint32_t> initNodeInfoIndices;
+	uint32_t maxDepthCounts = 0;
+	uint32_t maxClusterNums = 0;
+
+	uint32_t maxLodLevelNum = -1;
 
 	uint32_t sceneIndicesCount = 0;
 

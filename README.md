@@ -341,3 +341,14 @@ void traverseCurrLevel(TraverseJob & job);
 
 12.5
 TODO: 看Instance以及NaniteScene，看下是lod层的offset出问题了还是object层的offset出问题了
+
+12.7
+检查children index是否出错了
+
+构建compute pipelinee
+
+```cpp
+two subpasses
+
+
+```

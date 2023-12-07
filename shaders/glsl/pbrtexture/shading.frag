@@ -225,18 +225,36 @@ void main()
     float depth = imageLoad(depthBuffer,screenPos).x;
     uint clusterID = ID>>8;
     uint triangleID = ID&0xFF;
-	if(pcs.vis_clusters==1)
-	{
-		visualizeID(ID); 
-		return;
-	}
-	// outColor = vec4(vec3(triangleID/(0xFF*1.0)),1.0);
-	// return;
-    Cluster currCluster = inCluster[clusterID];
+	Cluster currCluster = inCluster[clusterID];
     uint globalTriangleID = currCluster.triangleStart+triangleID;
     uint v0i = inTriangles[globalTriangleID*3+0];
     uint v1i = inTriangles[globalTriangleID*3+1];
     uint v2i = inTriangles[globalTriangleID*3+2];
+	if(pcs.vis_clusters==2)
+	{
+		visualizeID(ID); 
+		return;
+	}
+	else if(pcs.vis_clusters==1)
+	{
+		vec4 inClusterInfos = inVertices[v0i].joint0;
+		if(inClusterInfos.x<0.5)
+			outColor = vec4(vec3(1.0,0.0,0.0),1.0);
+		else if(inClusterInfos.x<1.5)
+			outColor = vec4(vec3(0.0,1.0,0.0),1.0);
+		else if(inClusterInfos.x<2.5)
+			outColor = vec4(vec3(0.0,0.0,1.0),1.0);
+		else if(inClusterInfos.x<3.5)
+			outColor = vec4(vec3(1.0,1.0,0.0),1.0);
+		else if(inClusterInfos.x<4.5)
+			outColor = vec4(vec3(1.0,0.0,1.0),1.0);
+		else 
+			outColor = vec4(vec3(0.0,1.0,1.0),1.0);
+		return;
+	}
+	// outColor = vec4(vec3(triangleID/(0xFF*1.0)),1.0);
+	// return;
+    
     vec4 ndc = vec4(inUV*2.0-1.0,depth,1.0);
     vec4 worldPos = ubo.invView*ubo.invProj*ndc;
     worldPos.xyz/=worldPos.w;

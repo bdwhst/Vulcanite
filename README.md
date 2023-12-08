@@ -1,5 +1,7 @@
 # Vulcanite
 
+![Alt text](./images/demo.png)
+
 ### Dependencies
 - metis
 - assimp
@@ -14,8 +16,31 @@ For windows users, we recommend that you use [vcpkg](https://github.com/microsof
 If you have successfully installed all dependencies through vcpkg, then this program should be able to run normally. 
 
 TODO: Windows, not using vcpkg
-
 TODO: Linux 
+
+### Features Implemented
+
+- [ ] GPU Driven Depth Culling
+- [ ] Nanite Builder
+	- [ ] DAG Builder
+- [ ] Multiple Instance
+- [ ] Mixed-mode Rasterizer
+
+
+### Performance Analysis
+
+![](images/performance.png)
+
+
+### Miletone Slides
+
+- [Milestone1](https://docs.google.com/presentation/d/1KkI7cfCiym67k_yKQnZ-QDST0Q3UPPoxqMgxU9J9e30/edit?usp=sharing) - GPU-Driven Depth Culling, Clustering & Grouping
+- [Milestone2](https://docs.google.com/presentation/d/1YuY-mJDUGPB7RGOcJs3eZZ68J12EXOHgfcvojIDqEDI/edit?usp=sharing) - DAG, Serialization & Deserialization
+- [Milestone3](https://docs.google.com/presentation/d/1hUoOy5HGEKSDIVfERBmkov804C9v1XEtksona1Azle4/edit?usp=sharing) - Mixed-mode Rasterizer, Multiple Instance, Performance Analysis
+
+---
+
+**Below are for developers**
 
 ### TODOs
 
@@ -246,3 +271,20 @@ Multiple mesh 现在的问题：
 
 可能是什么引起的呢？
 - 对于dragon来说，它的索引应该是指不到bunny的mesh才对的，而对于bunny来说，它的objectId又更不应该对应dragon的modelMatrix。所以这种情况出现就是违背了前面两个条件的其中一种，但是如果是dragon的索引指向了bunny的vertex，最终出来的兔子耳朵不会这么完整，所以更可能的情况是：bunny的objectId指向了dragon。但是为什么在没有多个mesh的时候就没有出现这个情况呢？
+
+
+12.3
+
+关于BVH和MPMC，根据slide提供的数据以及GAMES104，感觉目前优先级比较高的应该还是实现BVH，然后考虑怎么在compute shader里面先做最基础的树的遍历，这个最基础的树的遍历应该就可以节省很多性能了，MPMC能够提供的大概有30%的提升。
+
+构建BVH：
+	- 还是在CPU侧，需要将children cluster indices留存下来
+	- 在GPU侧，如何使多个working thread共享一片内存？
+		- 直接访问buffer即可
+		- 同时我需要知道当前BVH的大致信息：起码要知道第一层多少个node（第一层指定thread时需要知道），以及知道每一层最多几个node（开辟buffer时需要）
+		- 对于同一层的working thread，我需要考虑：当前层数下所有node的parentError（具sig slide所说，只需要parentError，但是我们反正也存了当前节点的lod error），开辟两片buffer，一片buffer为临时的用来存储cluster node的区域，这片区域存储所有临时的应该被遍历的cluster index，另一篇区域存储所有最终将会被送到culling这一步的cluster
+	- 为什么GAMES104中说leaf node是以cluster group为单位？
+
+	似乎我对于这个里面的BVH过度理解了，它所说的BVH似乎就是对每个LOD各自都构建一个BVH？
+	那么workthread如何判断的呢？
+	先判断LOD0，如果

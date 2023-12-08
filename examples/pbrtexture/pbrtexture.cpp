@@ -510,7 +510,7 @@ public:
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			imageMemBarrier.subresourceRange.baseMipLevel = 0;
 			imageMemBarrier.subresourceRange.levelCount = 1;
@@ -527,7 +527,7 @@ public:
 			imageMemBarrier.image = SWRBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			imageMemBarrier.subresourceRange.baseMipLevel = 0;
@@ -788,6 +788,19 @@ public:
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 
+
+			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
+			imageMemBarriers[0].image = textures.hizbuffer.image;
+			imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
+			imageMemBarriers[0].subresourceRange.levelCount = 1;
+			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
+			imageMemBarriers[0].subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, imageMemBarriers.data());
 
 			/*
 			*

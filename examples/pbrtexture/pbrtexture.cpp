@@ -930,7 +930,7 @@ public:
 		scene.naniteMeshes.emplace_back(naniteMesh);
 
 		// Uncomment this part for performance test scene
-		modelMats.clear();
+		/*modelMats.clear();
 		for (int i = -6; i <= 6; i++)
 		{
 			for (int j = -6; j <= 6; j++) 
@@ -941,7 +941,7 @@ public:
 				scene.naniteObjects.emplace_back(instance);
 		
 			}
-		}
+		}*/
 
 		// Uncomment this part for normal scene
 		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);

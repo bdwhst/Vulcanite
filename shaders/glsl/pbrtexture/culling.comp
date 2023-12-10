@@ -66,6 +66,22 @@ layout(std430, set = 0, binding = 10) buffer NumVertices_sw {
 
 
 
+layout(set = 0, binding = 11) buffer ClusterIndices{
+    uint culledClusterSize;
+    uint frustumCullingNum;
+    uint occulusionCullingNum;
+    uint errorCullingNum;
+    uint culledClusterIndices[];
+} culledClusters;
+
+layout(set = 0, binding = 12) buffer clusterObjectIndexBuffer{
+    uint clusterObjectIndices[];
+};
+
+layout(set = 0, binding = 13) buffer readonly ModelMatIn{
+	mat4 inModelMats[];
+};
+
 layout(push_constant) uniform PushConstants {
     int numClusters;
     float threshold;
@@ -223,12 +239,24 @@ shared uint group_start_sw;
 void main()
 {
     uint index = gl_GlobalInvocationID.x;
-    
-    if(index >= pcs.numClusters) return;
+    if (gl_GlobalInvocationID.x >= culledClusters.culledClusterSize) return;
+    uint clusterIndex = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
+    uint objectId = clusterObjectIndices[gl_GlobalInvocationID.x];
 
     bool culled = false;
-    Cluster currCluster = indata[index];
-    float pixelArea;
+    Cluster currCluster = indata[clusterIndex];
+
+    currCluster.pMin = vec3(inModelMats[objectId] * vec4(currCluster.pMin, 1.0));
+    currCluster.pMax = vec3(inModelMats[objectId] * vec4(currCluster.pMax, 1.0));
+
+    // TODO: BVH traverse
+    // First work group: Just processing the first level of BVH
+    // if pe(c_0) <= threshold, then c_0 and all its children should be culled.
+    // just return
+    // else if e(c_0) > thresholld we should enqueue its children into the global buffer
+    // else if pe(c_0) > threshold and e(c_0) <= threshold, we should just do the rest
+
+    float pixelArea = 0.0;
     if(pcs.useFrustrumOcclusion==1)
     {
         culled = culled || frustrumCulling(currCluster);
@@ -244,9 +272,10 @@ void main()
         vec2 screenSpan = screenXY.zw-screenXY.xy;
         pixelArea = screenSpan.x*screenSpan.y;
     }
-    culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     bool useSWR = pcs.useSoftwareRast==1?pixelArea<256.0:false;
     //bool useSWR = true;
+    culled = culled || (errorData[gl_GlobalInvocationID.x].y <= pcs.threshold||errorData[gl_GlobalInvocationID.x].x > pcs.threshold);
+    //culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
     // if(gl_LocalInvocationID.x==0)
@@ -256,7 +285,7 @@ void main()
     // }
     // barrier();
 
-    uint totalVertices = culled?0:(indata[index].triangleEnd - indata[index].triangleStart)*3;
+    uint totalVertices = culled?0:(indata[clusterIndex].triangleEnd - indata[clusterIndex].triangleStart)*3;
     //TODO: reduce atomicity with shared memory
     // uint localIdx;
     // if(!useSWR)
@@ -291,7 +320,7 @@ void main()
     {
         for(uint i = 0; i < totalVertices / 3; i++)
         {
-            uint inIdx = indata[index].triangleStart * 3 + 3 * i;
+            uint inIdx = indata[clusterIndex].triangleStart * 3 + 3 * i;
             //uint outIdx = group_start_hw + localIdx + 3 * i;
             uint outIdx = localIdx + 3 * i;
             if(!useSWR)
@@ -299,14 +328,14 @@ void main()
                 outTriangles_hw[outIdx + 0] = inTriangles[inIdx + 0];
                 outTriangles_hw[outIdx + 1] = inTriangles[inIdx + 1];
                 outTriangles_hw[outIdx + 2] = inTriangles[inIdx + 2];
-                outIds_hw[outIdx/3] = uvec3(currCluster.objectId,index,i);
+                outIds_hw[outIdx/3] = uvec3(objectId,clusterIndex,i);
             }
             else
             {
                 outTriangles_sw[outIdx + 0] = inTriangles[inIdx + 0];
                 outTriangles_sw[outIdx + 1] = inTriangles[inIdx + 1];
                 outTriangles_sw[outIdx + 2] = inTriangles[inIdx + 2];
-                outIds_sw[outIdx/3] = uvec3(currCluster.objectId,index,i);
+                outIds_sw[outIdx/3] = uvec3(objectId,clusterIndex,i);
             }
             //int s = int(currCluster.objectId == 0) * 2 - 1;
             //outObjectIds[outIdx + 0] = s * int(inTriangles[inIdx + 0]);

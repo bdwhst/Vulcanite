@@ -227,6 +227,7 @@ void main()
     uint clusterID = ID>>8;
     uint triangleID = ID&0xFF;
 	Cluster currCluster = inCluster[clusterID];
+	uint objectId = 0;
     uint globalTriangleID = currCluster.triangleStart+triangleID;
     uint v0i = inTriangles[globalTriangleID*3+0];
     uint v1i = inTriangles[globalTriangleID*3+1];
@@ -265,7 +266,7 @@ void main()
     vec4 ndc = vec4(inUV*2.0-1.0,depth,1.0);
     vec4 worldPos = ubo.invView*ubo.invProj*ndc;
     worldPos.xyz/=worldPos.w;
-    mat4 model = inModelMats[currCluster.objectId];
+    mat4 model = inModelMats[objectId];
     vec4 v0wpos = model*vec4(inVertices[v0i].pos,1);
     vec4 v1wpos = model*vec4(inVertices[v1i].pos,1);
     vec4 v2wpos = model*vec4(inVertices[v2i].pos,1);

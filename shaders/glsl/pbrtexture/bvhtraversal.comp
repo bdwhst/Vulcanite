@@ -1,0 +1,323 @@
+#version 450
+
+#define WORKGROUP_SIZE 32
+
+layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
+
+#define CLUSTER_GROUP_MAX_SIZE 32
+
+struct BVHNodeInfo{
+    uint start;
+    uint end;
+    vec3 pMin;
+    vec3 pMax;
+    uint objectId;
+    vec4 errorR;
+    vec4 errorRP;
+    vec2 errorWorld;
+    ivec4 childrenNodeIndices;
+};
+
+struct BVHNodeInfoPass{
+    int nodeInfoNum;
+};
+
+layout(std430, binding = 0) buffer BVHNodeInfoBuffer{
+	BVHNodeInfo bvhNodeInfos[];
+};
+
+layout(std430, binding = 1) buffer readonly currBVHNodes{
+    uint currBvhNodeInfoSize;
+    uint currBVHNodeInfoIndices[]; // Use first element as the size of bvh node info
+};
+
+layout(std430, binding = 2) buffer writeonly nextBVHNodes{
+    uint nextBvhNodeInfoSize;
+    uint nextBVHNodeInfoIndices[]; // Use first element as the size of bvh node info
+};
+
+layout(std430, binding = 3) buffer clusterIndexBuffer{
+    uint clusterSize; 
+    uint frustumCullingNum;
+    uint occulusionCullingNum;
+    uint errorCullingNum;
+	uint clusters[]; // Use first element as the size of clusters
+};
+
+layout(binding = 4) uniform UBOMats {
+    mat4 model; //unused
+    mat4 lastView;
+    mat4 lastProj;
+    mat4 currView;
+    mat4 currProj;
+} ubomats;
+
+layout(binding = 5) uniform sampler2D lastHZB;
+
+layout(binding = 6) uniform UBOMats2 {
+    mat4 view;
+    mat4 proj;
+    vec3 camUp;
+    vec3 camRight;
+} ubomats2;
+
+layout(binding = 7) buffer clusterObjectIndexBuffer{
+    uint clusterObjectIndices[];
+};
+
+layout(binding = 8) buffer SortedClusterIndicesBuffer{
+    uint sortedClusterIndices[];
+};
+
+layout(push_constant) uniform PushConstants {
+    vec2 screenSize;
+    float threshold;
+} pcs;
+
+// Naive AABB compute
+void getScreenAABB(BVHNodeInfo b, inout vec4 screenXY, inout float minZ)
+{
+    //TODO: reduce number of points check here
+    vec4 p0 = vec4(b.pMin.x,b.pMin.y,b.pMin.z,1.0);
+    vec4 p1 = vec4(b.pMax.x,b.pMin.y,b.pMin.z,1.0);
+    vec4 p2 = vec4(b.pMin.x,b.pMax.y,b.pMin.z,1.0);
+    vec4 p3 = vec4(b.pMin.x,b.pMin.y,b.pMax.z,1.0);
+    vec4 p4 = vec4(b.pMax.x,b.pMax.y,b.pMin.z,1.0);
+    vec4 p5 = vec4(b.pMin.x,b.pMax.y,b.pMax.z,1.0);
+    vec4 p6 = vec4(b.pMax.x,b.pMin.y,b.pMax.z,1.0);
+    vec4 p7 = vec4(b.pMax.x,b.pMax.y,b.pMax.z,1.0);
+
+    vec4 p0h = ubomats.lastProj * ubomats.lastView * p0;
+    vec4 p1h = ubomats.lastProj * ubomats.lastView * p1;
+    vec4 p2h = ubomats.lastProj * ubomats.lastView * p2;
+    vec4 p3h = ubomats.lastProj * ubomats.lastView * p3;
+    vec4 p4h = ubomats.lastProj * ubomats.lastView * p4;
+    vec4 p5h = ubomats.lastProj * ubomats.lastView * p5;
+    vec4 p6h = ubomats.lastProj * ubomats.lastView * p6;
+    vec4 p7h = ubomats.lastProj * ubomats.lastView * p7;
+
+    p0h.xyz /= p0h.w;
+    p1h.xyz /= p1h.w;
+    p2h.xyz /= p2h.w;
+    p3h.xyz /= p3h.w;
+    p4h.xyz /= p4h.w;
+    p5h.xyz /= p5h.w;
+    p6h.xyz /= p6h.w;
+    p7h.xyz /= p7h.w;
+
+    p0h.xy = p0h.xy*0.5+0.5;
+    p1h.xy = p1h.xy*0.5+0.5;
+    p2h.xy = p2h.xy*0.5+0.5;
+    p3h.xy = p3h.xy*0.5+0.5;
+    p4h.xy = p4h.xy*0.5+0.5;
+    p5h.xy = p5h.xy*0.5+0.5;
+    p6h.xy = p6h.xy*0.5+0.5;
+    p7h.xy = p7h.xy*0.5+0.5;
+
+    minZ = 1.0;
+    minZ = min(minZ, min(p0h.z,p1h.z));
+    minZ = min(minZ, min(p2h.z,p3h.z));
+    minZ = min(minZ, min(p4h.z,p5h.z));
+    minZ = min(minZ, min(p6h.z,p7h.z));
+
+    vec2 minXY = vec2(1.0);
+    minXY = min(minXY, min(p0h.xy,p1h.xy));
+    minXY = min(minXY, min(p2h.xy,p3h.xy));
+    minXY = min(minXY, min(p4h.xy,p5h.xy));
+    minXY = min(minXY, min(p6h.xy,p7h.xy));
+
+    vec2 maxXY = vec2(0.0);
+    maxXY = max(maxXY, max(p0h.xy,p1h.xy));
+    maxXY = max(maxXY, max(p2h.xy,p3h.xy));
+    maxXY = max(maxXY, max(p4h.xy,p5h.xy));
+    maxXY = max(maxXY, max(p6h.xy,p7h.xy));
+
+    screenXY.xy = minXY;
+    screenXY.zw = maxXY;
+}
+
+bool frustrumCulling(BVHNodeInfo b)
+{
+    const float eps = 1e-3;
+    bool inFrustrum = false;
+    vec4 hpos;
+    vec4 p0 = vec4(b.pMin.x,b.pMin.y,b.pMin.z,1.0);
+    vec4 p1 = vec4(b.pMax.x,b.pMin.y,b.pMin.z,1.0);
+    vec4 p2 = vec4(b.pMin.x,b.pMax.y,b.pMin.z,1.0);
+    vec4 p3 = vec4(b.pMin.x,b.pMin.y,b.pMax.z,1.0);
+    vec4 p4 = vec4(b.pMax.x,b.pMax.y,b.pMin.z,1.0);
+    vec4 p5 = vec4(b.pMin.x,b.pMax.y,b.pMax.z,1.0);
+    vec4 p6 = vec4(b.pMax.x,b.pMin.y,b.pMax.z,1.0);
+    vec4 p7 = vec4(b.pMax.x,b.pMax.y,b.pMax.z,1.0);
+
+    hpos = ubomats.currProj * ubomats.currView * p0;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = ubomats.currProj * ubomats.currView * p1;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = ubomats.currProj * ubomats.currView * p2;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+    
+    hpos = ubomats.currProj * ubomats.currView * p3;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = ubomats.currProj * ubomats.currView * p4;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = ubomats.currProj * ubomats.currView * p5;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = ubomats.currProj * ubomats.currView * p6;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+
+    hpos = ubomats.currProj * ubomats.currView * p7;
+    if(hpos.w==0.0) return false;
+    hpos.xyz /= hpos.w;
+    inFrustrum = inFrustrum || (hpos.x>-1.0-eps&&hpos.x<1.0+eps&&hpos.y>-1.0-eps&&hpos.y<1.0+eps&&hpos.z>0.0-eps&&hpos.z<1.0+eps);
+    
+    return !inFrustrum;
+}
+
+
+bool occlusionCulling(BVHNodeInfo b)
+{
+    vec4 clipXY;
+    float minZ;
+    getScreenAABB(b,clipXY,minZ);
+    vec4 screenSize = textureSize(lastHZB, 0).xyxy;
+    vec4 screenXY = clipXY * screenSize;
+    vec2 screenSpan = screenXY.zw-screenXY.xy;
+    float hzbLevel = ceil(log2(max(screenSpan.x,screenSpan.y)));
+    float hzbLevel_1 = max(hzbLevel-1,0);
+    float texScale = exp2(-hzbLevel_1);
+    vec2 texSpan = ceil(screenXY.zw*texScale) - floor(screenXY.xy*texScale);
+    if(texSpan.x<2&&texSpan.y<2) hzbLevel = hzbLevel_1;
+    float z1 = textureLod(lastHZB,vec2(clipXY.x,clipXY.y),hzbLevel).x;
+    float z2 = textureLod(lastHZB,vec2(clipXY.x,clipXY.w),hzbLevel).x;
+    float z3 = textureLod(lastHZB,vec2(clipXY.z,clipXY.y),hzbLevel).x;
+    float z4 = textureLod(lastHZB,vec2(clipXY.z,clipXY.w),hzbLevel).x;
+    float maxHiz = max(max(z1,z2),max(z3,z4));
+    return minZ>maxHiz;
+}
+
+float getScreenBoundRadiusSq(vec3 center, float R)
+{
+    //TODO: get a better error estimation
+    vec4 c = ubomats2.proj*ubomats2.view*vec4(center,1);
+    c.xy/=c.w;
+    c.xy=c.xy*0.5+0.5;
+    vec4 p0 = ubomats2.proj*ubomats2.view*vec4(R*ubomats2.camUp+center,1);
+    p0.xy/=p0.w;
+    p0.xy=p0.xy*0.5+0.5;
+    vec4 p1 = ubomats2.proj*ubomats2.view*vec4(R*ubomats2.camRight+center,1);
+    p1.xy/=p1.w;
+    p1.xy=p1.xy*0.5+0.5;
+    vec2 v0 = (p0.xy-c.xy)*pcs.screenSize;
+    vec2 v1 = (p1.xy-c.xy)*pcs.screenSize;
+    return max(dot(v0,v0),dot(v1,v1));
+}
+
+bool errorCulling(BVHNodeInfo b)
+{
+    vec3 center;
+    float R;
+
+    //center = b.errorRP.xyz;
+    //R = b.errorRP.w;
+    //vec3 p0 = vec3(b.pMin.x,b.pMin.y,b.pMin.z);
+    //vec3 p1 = vec3(b.pMax.x,b.pMin.y,b.pMin.z);
+    //vec3 p2 = vec3(b.pMin.x,b.pMax.y,b.pMin.z);
+    //vec3 p3 = vec3(b.pMin.x,b.pMin.y,b.pMax.z);
+    //vec3 p4 = vec3(b.pMax.x,b.pMax.y,b.pMin.z);
+    //vec3 p5 = vec3(b.pMin.x,b.pMax.y,b.pMax.z);
+    //vec3 p6 = vec3(b.pMax.x,b.pMin.y,b.pMax.z);
+    //vec3 p7 = vec3(b.pMax.x,b.pMax.y,b.pMax.z);
+    //
+    //float err = b.errorWorld.y * getScreenBoundRadiusSq(p0,R);
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p1,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p2,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p3,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p4,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p5,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p6,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p7,R));
+	//return err <= pcs.threshold;
+    float err = b.errorWorld.y * getScreenBoundRadiusSq(b.errorRP.xyz, b.errorRP.w);
+    return err <= pcs.threshold;
+    center = 0.5 * (b.pMin + b.pMax);
+	//R = max(max(b.pMax.x - b.pMin.x, b.pMax.y - b.pMin.y), b.pMax.z - b.pMin.z);
+	R = b.errorRP.w;
+	return b.errorWorld.y * getScreenBoundRadiusSq(center, R)<= pcs.threshold;
+    //return false;
+}
+
+void addClusterIndex1(BVHNodeInfo nodeInfo)
+{
+    uint leafClusterSize = nodeInfo.end - nodeInfo.start;
+    uint clusterStartIndex = atomicAdd(clusterSize, leafClusterSize);
+    for(int i = 0; i < leafClusterSize; i++){
+		clusters[clusterStartIndex + i] = sortedClusterIndices[nodeInfo.start + i];
+        clusterObjectIndices[clusterStartIndex + i] = nodeInfo.objectId;
+	}
+}
+
+
+void main(){
+	if(gl_GlobalInvocationID.x >= currBvhNodeInfoSize) return;
+	BVHNodeInfo nodeInfo = bvhNodeInfos[currBVHNodeInfoIndices[gl_GlobalInvocationID.x]];
+    // frustum culling & occlusion culling
+    if (frustrumCulling(nodeInfo)) {
+	    //atomicAdd(frustumCullingNum, 1);
+        return;
+    }
+    if (occlusionCulling(nodeInfo)) {
+        //atomicAdd(occulusionCullingNum, 1);
+        return;
+    }
+    if (errorCulling(nodeInfo)) {
+        //atomicAdd(errorCullingNum, 1);
+        return;
+    }
+
+    // output to clusterIndexBuffer
+    uint leafClusterSize = nodeInfo.end - nodeInfo.start;
+    bool isLeaf = (leafClusterSize != 0);
+    if (isLeaf){
+        // TODO: Optimization
+        uint clusterStartIndex = atomicAdd(clusterSize, leafClusterSize);
+        for(int i = 0; i < leafClusterSize; i++){
+		    clusters[clusterStartIndex + i] = sortedClusterIndices[nodeInfo.start + i];
+            clusterObjectIndices[clusterStartIndex + i] = nodeInfo.objectId;
+	    }
+	}
+    // output to nextBVHNodeInfoIndices
+    else
+    {
+        // TODO: Optimization
+        // push children indices into nextBVHNodeInfoIndices
+        uint childSize = 0;
+        for(int i = 0; i < 4; i++){
+			if(nodeInfo.childrenNodeIndices[i] == -1) break;
+            childSize++;
+		}
+		uint nextBVHStartIndex = atomicAdd(nextBvhNodeInfoSize, childSize);
+        for(int i = 0; i < childSize; i++){
+		    nextBVHNodeInfoIndices[nextBVHStartIndex + i] = nodeInfo.childrenNodeIndices[i];
+        }
+    }
+}

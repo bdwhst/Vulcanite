@@ -4,29 +4,6 @@
 #include "glm/glm.hpp"
 #include "Cluster.h"
 
-//ClusterInfo for drawing
-struct ClusterInfo {
-    alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
-    alignas(16) glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
-	// [triangleIndicesStart, triangleIndicesEnd) is the range of triangleIndicesSortedByClusterIdx
-	// left close, right open
-    alignas(4) uint32_t triangleIndicesStart; // Used to index Mesh::triangleIndicesSortedByClusterIdx
-    alignas(4) uint32_t triangleIndicesEnd; // Used to index Mesh::triangleIndicesSortedByClusterIdx
-    alignas(4) uint32_t objectIdx;
-
-	void mergeAABB(const glm::vec3& pMinOther, const glm::vec3& pMaxOther) {
-		pMinWorld = glm::min(pMinWorld, pMinOther);
-		pMaxWorld = glm::max(pMaxWorld, pMaxOther);
-	};
-};
-
-struct ErrorInfo
-{
-    alignas(16) glm::vec4 centerR;
-    alignas(16) glm::vec4 centerRP;
-    alignas(8)  glm::vec2 errorWorld;//node error and parent error in world
-};
-
 //#define DEBUG_LOD_START 0
 
 
@@ -237,7 +214,7 @@ struct Instance {
                 float worldRadius = glm::length(rootTransform * glm::vec4(glm::vec3(cluster.boundingSphereRadius, 0, 0), 0.0));
                 //std::cout << cluster.triangleIndices.size() << std::endl;
                 //std::cout << cluster.boundingSphereRadius << " " << worldRadius << std::endl;
-                ASSERT(cluster.triangleIndices.size() <= CLUSTER_THRESHOLD, "cluster.triangleIndices.size() is over thresold");
+                ASSERT(cluster.triangleIndices.size() <= CLUSTER_MAX_SIZE, "cluster.triangleIndices.size() is over thresold");
                 ASSERT(cluster.boundingSphereRadius > 0 || cluster.triangleIndices.size() == 0, "boundingSphereRadius <= 0");
                 ASSERT(worldRadius > 0 || cluster.triangleIndices.size() == 0, "worldRadius <= 0");
                 errorInfo[j + currClusterNum].centerR = glm::vec4(worldCenter, worldRadius);
@@ -274,5 +251,100 @@ struct Instance {
 #endif // DEBUG_LOD_START
         }
 	}
+    std::shared_ptr<NaniteBVHNode> rootNode;
 
+    void reconstructBVH()
+    {
+        // Sadly, after several trials, the best implementation that I can think of would be
+        //      Re-construct BVH tree from flattened version.
+        //      For N instances, because we have N transforms, we need to build N BVH trees.
+        //      Then, in `NaniteScene`, we will create a virtual node that connects all the virtual nodes in every instances
+        //      and flatten the big whole BVH in `NaniteScene`
+
+        std::vector<std::shared_ptr<NaniteBVHNode>> flattenedBVHNodes(referenceMesh->flattenedBVHNodeInfos.size(), nullptr);
+        
+        // TODO
+        std::vector<uint32_t> clusterIndexOffset; // This offset is caused by different LODs 
+        clusterIndexOffset.resize(referenceMesh->meshes.size(), 0);
+        for (size_t i = 1; i < clusterIndexOffset.size(); i++)
+        {
+            clusterIndexOffset[i] = clusterIndexOffset[i - 1] + referenceMesh->meshes[i-1].clusterNum;
+            //std::cout << "Lod: " << i << std::endl;
+            //std::cout << "ClusterIndexOffset: " << clusterIndexOffset[i] << std::endl;
+            //std::cout << "ClusterNum: " << referenceMesh->meshes[i].clusterNum << std::endl;
+        }
+        std::unordered_set<uint32_t> clusterIndexSet;
+        uint32_t totalClusterNum = clusterIndexOffset.back() + referenceMesh->meshes.back().clusterNum;
+        for (size_t i = 0; i < totalClusterNum; i++)
+        {
+            clusterIndexSet.insert(i);
+        }
+        for (size_t i = 0; i < referenceMesh->flattenedBVHNodeInfos.size(); i++)
+        {
+            auto & nodeInfo = referenceMesh->flattenedBVHNodeInfos[i];
+            auto& currNode = flattenedBVHNodes[i];
+            currNode = std::make_shared<NaniteBVHNode>();
+            currNode->depth = nodeInfo.depth;
+            currNode->parentNormalizedError = nodeInfo.parentNormalizedError;
+            currNode->normalizedlodError = nodeInfo.normalizedlodError;
+            glm::vec3 parentCenter(nodeInfo.parentBoundingSphere);
+            parentCenter = glm::vec3(rootTransform * glm::vec4(parentCenter, 1.0));
+            currNode->parentBoundingSphere = glm::vec4(parentCenter, nodeInfo.parentBoundingSphere.w);
+            // Apply transform
+            currNode->pMin = glm::vec3(rootTransform * glm::vec4(nodeInfo.pMin, 1.0f));
+            currNode->pMax = glm::vec3(rootTransform * glm::vec4(nodeInfo.pMax, 1.0f));
+            currNode->nodeStatus = nodeInfo.nodeStatus;
+            currNode->index = nodeInfo.index;
+            currNode->lodLevel = nodeInfo.lodLevel;
+            currNode->start = nodeInfo.start;
+            currNode->end = nodeInfo.end;
+            ASSERT(currNode->nodeStatus == VIRTUAL_NODE || currNode->lodLevel >= 0, "lodLevel of any non-root node is negative!");
+            ASSERT(currNode->nodeStatus == LEAF || currNode->clusterIndices[0] == -1, "non-leaf node also has a valid cluster index!");
+            std::string indent(nodeInfo.depth, '\t');
+            //std::cout << indent << nodeInfo.parentNormalizedError;
+            //std::cout  << indent << (currNode->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
+            //    << " pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z
+            //    << " pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z << std::endl;
+            for (size_t j = 0; j < currNode->clusterIndices.size(); j++)
+            {
+                //std::cout << flattenedBVHNodes[i]->clusterIndices[j] << std::endl;
+                if (nodeInfo.clusterIndices[j] >= 0)
+                {
+                    currNode->clusterIndices[j] = nodeInfo.clusterIndices[j] + clusterIndexOffset[currNode->lodLevel];
+                    //std::cout << std::string(currNode->depth, '\t') << "lodLevel: " << currNode->lodLevel << std::endl;
+                    //std::cout << std::string(currNode->depth, '\t') << "clusterOffset: " << clusterIndexOffset[currNode->lodLevel] << std::endl;
+                    //std::cout << std::string(currNode->depth, '\t') << "nodeInfoIndex: " << nodeInfo.clusterIndices[j] << std::endl;
+                    //std::cout << std::string(currNode->depth, '\t') << "currNodeIndex: " << currNode->clusterIndices[j] << std::endl;
+                    
+                    ASSERT(clusterIndexSet.find(currNode->clusterIndices[j]) != clusterIndexSet.end(), "Duplicated cluster index!");
+                    clusterIndexSet.erase(currNode->clusterIndices[j]);
+                }
+            }
+            if (currNode->nodeStatus == LEAF) 
+            {
+                //for (size_t j = 0; j < CLUSTER_GROUP_MAX_SIZE; j++)
+                //{
+                //    std::cout << std::string(currNode->depth, '\t') << "nodeInfo: " << nodeInfo.clusterIndices[j] << std::endl;
+                //    std::cout << std::string(currNode->depth, '\t') << "currNode: " << currNode->clusterIndices[j] << std::endl;
+                //}
+            }
+            ASSERT(currNode->nodeStatus != INVALID, "Invalid nodes!");
+
+            //std::cout << indent << (flattenedBVHNodes[i]->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
+            //    << flattenedBVHNodes[i]->index << " "
+            //    << flattenedBVHNodes[i]->depth << " " << std::endl;
+        }
+        ASSERT(clusterIndexSet.empty(), "Unused cluster index!");
+
+        for (size_t i = 0; i < referenceMesh->flattenedBVHNodeInfos.size(); i++)
+        {
+            auto & nodeInfo = referenceMesh->flattenedBVHNodeInfos[i];
+            for (auto childIndex: nodeInfo.children)
+            {
+                flattenedBVHNodes[i]->children.push_back(flattenedBVHNodes[childIndex]);
+            }
+        }
+
+        rootNode = flattenedBVHNodes[0];
+    }
 };

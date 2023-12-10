@@ -6,6 +6,7 @@
 
 #include <filesystem>
 
+#include "Common.h"
 #include "Mesh.h"
 
 struct NaniteMesh {
@@ -32,8 +33,18 @@ struct NaniteMesh {
 	std::vector<ClusterNode> flattenedClusterNodes;
 	void flattenDAG();
 
+	/************ Flatten BVH *************/
+	std::shared_ptr<NaniteBVHNode> virtualBVHRootNode;
+	std::vector<NaniteBVHNodeInfo> flattenedBVHNodeInfos;
+	void flattenBVH();
+
 	/************ Build Info *************/
 	void generateNaniteInfo();
+
+	std::vector<ClusterInfo> clusterInfo;
+	std::vector<ErrorInfo> errorInfo;
+	std::vector<uint32_t> sortedClusterIndices;
+	void buildClusterInfo();
 
 	/************ Serialization *************/
 	void serialize(const std::string& filepath);
@@ -55,6 +66,7 @@ struct NaniteMesh {
 	std::vector<uint32_t> indexBuffer;
 	std::vector<vkglTF::Vertex> vertexBuffer;
 	std::vector<vkglTF::Primitive> primitives;
+	std::vector<uint32_t> clusterIndexOffset; // This offset is caused by different LODs
 
 	const char* filepath = nullptr;
 	const char* cache_time_key = "cache_time";

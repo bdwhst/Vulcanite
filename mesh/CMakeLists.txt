@@ -6,6 +6,7 @@ set(headers
     "Mesh.h"
     "NaniteMesh.h"
     "NaniteScene.h"
+    "NaniteBVH.h"
     "Graph.h"
     "utils.h"
     "Config.h"

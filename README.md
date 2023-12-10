@@ -288,3 +288,99 @@ Multiple mesh 现在的问题：
 	似乎我对于这个里面的BVH过度理解了，它所说的BVH似乎就是对每个LOD各自都构建一个BVH？
 	那么workthread如何判断的呢？
 	先判断LOD0，如果
+
+12.4
+
+BVH Traversal
+
+- First we should write something like this
+
+```cpp
+
+VkBuffer allNodeInfos;
+VkBuffer currNodeInfoList;
+VkBuffer nextNodeInfoList;
+
+VkPipeline bvhTraversePipeline;
+VkPipelineLayout bvhTraversePipelineLayout;
+
+1. Create buffer;
+2. Create descriptor set & layout with buffer;
+3. Create pipeline layout with descriptor layout;
+4. Write shader of traversing
+	4-a. Before traversing, push virtual node in.
+	4-b. Do traversal. Co valid chilren into nextNodeInfoList;
+	4-c. Swap currNodeInfoList & nextNodeInfoList. CLEAR currNodeInfoList;
+	4-d. 
+5. Creaete buffer barrier between traverse and culling;
+
+
+// We need two descriptor layout? to do swapchain? 
+// Or even worse, we might need two pipeline?
+
+struct TraverseJob
+{
+	uint32_t level;
+	uint32_t nodeStart;
+	uint32_t nodeCount;
+};
+
+void traverseBVH()
+{
+	for	(i < maxLevel)
+	{
+		TraverseJob job;
+		job.level = i;
+		job.nodeStart = 
+	}
+}
+
+void traverseCurrLevel(TraverseJob & job);
+
+```
+
+12.5
+TODO: 看Instance以及NaniteScene，看下是lod层的offset出问题了还是object层的offset出问题了
+
+12.7
+检查children index是否出错了
+
+构建compute pipelinee
+
+```cpp
+two subpasses
+
+
+```
+
+12.8
+
+相当迷惑的两个问题
+都是关于Vulkan内存分配的问题
+
+---
+
+首先是内存对齐的问题
+```cpp
+
+
+```
+不知道为什么在shader侧的alignment似乎会变得很大。
+
+---
+
+然后是目前遇到的一个createBuffer的问题
+
+目前在调用以下代码创建buffer的时候：
+```cpp
+VK_CHECK_RESULT(vulkanDevice->createBuffer(
+	VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	scene.maxDepthCounts * sizeof(uint32_t),
+	&currNodeInfosBuffer.buffer,
+	&currNodeInfosBuffer.memory,
+	nullptr));
+```
+会神奇的创建出一个size只有一半的buffer，这个buffer的size计算没有错，在创建之后CPU端获取memory requirement的size也没有错，但是到nsight graphics里面就显示只有一般的大小，导致了一些奇怪的行为。
+
+

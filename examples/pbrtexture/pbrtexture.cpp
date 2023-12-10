@@ -785,9 +785,7 @@ public:
 		//}
 
 		////
-		scene.createVertexIndexBuffer(vulkanDevice, queue);
-		scene.createClusterInfos(vulkanDevice, queue);
-		scene.createBVHNodeInfos(vulkanDevice, queue);
+		scene.createNaniteSceneInfo(vulkanDevice, queue);
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
 		textures.albedoMap.loadFromFile(getAssetPath() + "models/cerberus/albedo.ktx", VK_FORMAT_R8G8B8A8_UNORM, vulkanDevice, queue);

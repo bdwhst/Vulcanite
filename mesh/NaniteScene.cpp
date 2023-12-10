@@ -1,5 +1,20 @@
 #include "NaniteScene.h"
 
+void NaniteScene::createNaniteSceneInfo(vks::VulkanDevice* device, VkQueue transferQueue)
+{
+	createVertexIndexBuffer(device, transferQueue);
+	createClusterInfos(device, transferQueue);
+	createBVHNodeInfos(device, transferQueue);
+    for (size_t i = 0; i < depthCounts.size(); i++)
+    {
+        std::cout << "Depth " << i << " has " << depthCounts[i] << " nodes." << std::endl;
+        std::cout << "Depth " << i << " has " << depthLeafCounts[i] << " leaf nodes." << std::endl;
+    }
+    //ASSERT(0, "Stop here");
+    std::cout << "Among each level, largest node count is: " << maxDepthCounts << std::endl;
+    std::cout << "Total cluster count within current scene: " << maxClusterNum << std::endl;
+}
+
 void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue)
 {
     std::vector<vkglTF::Vertex> vertexBuffer;
@@ -113,45 +128,26 @@ void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transfer
         auto& naniteMesh = naniteMeshes[i];
         auto& instance = Instance(&naniteMesh, glm::mat4(1.0f));
         naniteMesh.buildClusterInfo();
-		clusterIndexOffsets[i] = clusterInfo.size();
-		clusterInfo.insert(clusterInfo.end(), naniteMesh.clusterInfo.begin(), naniteMesh.clusterInfo.end());
+        clusterIndexOffsets[i] = clusterInfo.size();
+        //clusterInfo.insert(clusterInfo.end(), naniteMesh.clusterInfo.begin(), naniteMesh.clusterInfo.end());
+        for (auto ci : naniteMesh.clusterInfo)
+        {
+            if (i != 0) {
+                ci.triangleIndicesStart += indexCounts[i - 1] / 3;
+                ci.triangleIndicesEnd += indexCounts[i - 1] / 3;
+            }
+            clusterInfo.push_back(ci);
+        }
         clusterIndexCounts[i] = clusterInfo.size();
         errorInfo.insert(errorInfo.end(), naniteMesh.errorInfo.begin(), naniteMesh.errorInfo.end());
     }
     ASSERT(clusterInfo.size() == errorInfo.size(), "clusterInfo.size() should be equal to errorInfo.size()");
-    //for (size_t i = 0; i < clusterInfo.size(); i++)
-        for (size_t i = 0; i < 200; i++)
-    {
-        std::cout << "i: " << i << std::endl;
-        std::cout << "errorInfo[i].centerR: " << errorInfo[i].centerR.x << " " << errorInfo[i].centerR.y << " " << errorInfo[i].centerR.z << " " << errorInfo[i].centerR.w << std::endl;
-        std::cout << "errorInfo[i].centerRP: " << errorInfo[i].centerRP.x << " " << errorInfo[i].centerRP.y << " " << errorInfo[i].centerRP.z << " " << errorInfo[i].centerRP.w << std::endl;
-        std::cout << "errorInfo[i].errorWorld: " << errorInfo[i].errorWorld.x << " " << errorInfo[i].errorWorld.y << std::endl;
-        ASSERT(abs(errorInfo[i].centerR.x) > FLT_EPSILON, "Invalid errorR");
-    }
-        std::cout << alignof(ClusterInfo) << std::endl;
-        std::cout << sizeof(ClusterInfo) << std::endl;
-    //clusterIndexOffsets.resize(naniteObjects.size());
+
     for (int i = 0; i < naniteObjects.size(); ++i) {
         auto& naniteObject = naniteObjects[i];
-    //    naniteObject.buildClusterInfo();
         auto referenceMeshIndex = std::find(naniteMeshes.begin(), naniteMeshes.end(), *(naniteObject.referenceMesh)) - naniteMeshes.begin();
-    //    clusterIndexOffsets[i] = clusterInfo.size();
-    //    std::cout << "i " << i << " clusterIndexOffsets[i] " << clusterIndexOffsets[i] << std::endl;
-    //    for (auto ci : naniteObject.clusterInfo)
-    //    {
-    //        // TODO: Should adjust this part when multiple meshes are imported
-    //        //auto referenceMeshIndex = 0;
-    //        if (referenceMeshIndex != 0) {
-    //            ci.triangleIndicesStart += indexCounts[referenceMeshIndex-1] / 3;
-    //            ci.triangleIndicesEnd += indexCounts[referenceMeshIndex-1] / 3;
-    //        }
-    //        ci.objectIdx = i;
-    //        clusterInfo.push_back(ci);
-    //    }
-    //    errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
         sceneIndicesCount += indexCounts[referenceMeshIndex];
         maxClusterNum += clusterIndexCounts[referenceMeshIndex];
-    //    maxClusterNums += naniteObject.referenceMesh->meshes[0].clusterNum;
     }
 }
 
@@ -161,16 +157,20 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
     for (size_t i = 0; i < naniteMeshes.size(); i++)
     {
         auto & naniteMesh = naniteMeshes[i];
-        sortedClusterIndices.insert(sortedClusterIndices.end(), naniteMesh.sortedClusterIndices.begin(), naniteMesh.sortedClusterIndices.end());
+        for (size_t j = 0; j < naniteMesh.sortedClusterIndices.size(); j++)
+        {
+            sortedClusterIndices.push_back(naniteMesh.sortedClusterIndices[j] + clusterIndexOffsets[i]);
+        }
     }
-    std::cout << "sortedClusterIndices.size(): " << sortedClusterIndices.size() << std::endl;
     virtualRootNode = std::make_shared<NaniteBVHNode>();
     virtualRootNode->nodeStatus = VIRTUAL_NODE;
     //virtualRootNode->depth = 0;
     for (int i = 0; i < naniteObjects.size(); ++i) {
         auto& naniteObject = naniteObjects[i];
         naniteObject.reconstructBVH();
+        auto referenceMeshIndex = std::find(naniteMeshes.begin(), naniteMeshes.end(), *(naniteObject.referenceMesh)) - naniteMeshes.begin();
         naniteObject.rootNode->objectIdx = i;
+        naniteObject.rootNode->meshIdx = referenceMeshIndex;
         virtualRootNode->children.push_back(naniteObject.rootNode);
     }
 
@@ -208,22 +208,15 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
             //std::cout << currNode->depth << " " << currNode->objectIdx;
             if (currNode != virtualRootNode) {
                 child->objectIdx = currNode->objectIdx;
+                child->meshIdx = currNode->meshIdx;
             }
             //child->depth = currNode->depth + 1;
             nodeQueue.push(child);
         }
     }
-
-    int clusterSize = clusterInfo.size();
-    std::unordered_set<int> clusterIndexSets;
-    std::cout << "clusterSize: " << clusterSize << std::endl;
-    for (size_t i = 0; i < clusterSize; i++)
-    {
-        clusterIndexSets.insert(i);
-    }
+    
     bvhNodeInfos.resize(flattenedNonVirtualNodes.size());
 
-    std::vector<uint32_t> depthLeafCounts;
     for (size_t i = 0; i < flattenedNonVirtualNodes.size(); i++)
     {
         auto& currNode = flattenedNonVirtualNodes[i];
@@ -246,7 +239,8 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         nodeInfo.errorWorld.x = currNode->normalizedlodError;
         nodeInfo.errorWorld.y = currNode->parentNormalizedError;
         nodeInfo.errorRP = currNode->parentBoundingSphere;
-        nodeInfo.clusterIntervals = glm::ivec2(currNode->start, currNode->end);
+        nodeInfo.clusterIntervals.x = currNode->start + clusterIndexOffsets[currNode->meshIdx];
+        nodeInfo.clusterIntervals.y = currNode->end + clusterIndexOffsets[currNode->meshIdx];
         //std::cout << indent << (currNode->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
         //    << " pMin: " << nodeInfo.pMinWorld.x << " " << nodeInfo.pMinWorld.y << " " << nodeInfo.pMinWorld.z
         //    << " pMax: " << nodeInfo.pMaxWorld.x << " " << nodeInfo.pMaxWorld.y << " " << nodeInfo.pMaxWorld.z << std::endl;
@@ -320,37 +314,12 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
     }
 
     //ASSERT(clusterIndexSets.size() == 0, "Some clusters are not covered");
-    for (size_t i = 0; i < depthCounts.size(); i++)
-    {
-        std::cout << "i: " << i << " depthCounts[i]: " << depthCounts[i] << std::endl;
-        std::cout << "i: " << i << " depthLeafCounts[i]: " << depthLeafCounts[i] << std::endl;
-    }
-    std::cout << alignof(BVHNodeInfo) << std::endl;
-    std::cout << sizeof(BVHNodeInfo) << std::endl;
-    //ASSERT(0, "Stop here");
     maxDepthCounts = std::max_element(depthCounts.begin(), depthCounts.end())[0];
-    std::cout << "maxDepthCounts: " << maxDepthCounts << std::endl;
+
     initNodeInfoIndices.resize(depthCounts[0] + 1); // Init node info indices by depth 0 node count
     initNodeInfoIndices[0] = depthCounts[0];
     for (size_t i = 1; i <= depthCounts[0]; i++)
     {
         initNodeInfoIndices[i] = i-1;
     }
-
-    //for (size_t i = 0; i < flattenedNonVirtualNodes.size(); i++)
-    //{
-    //    auto& currNode = flattenedNonVirtualNodes[i];
-    //    auto & nodeInfo = bvhNodeInfos[i];
-    //    if (currNode->depth == depthCounts.size() - 1) {
-    //        std::cout << "-----" << std::endl;
-    //        std::cout << currNode->index << std::endl;
-    //        std::cout << nodeInfo.childrenNodeIndices[0] << std::endl;
-    //        std::cout << nodeInfo.childrenNodeIndices[1] << std::endl;
-    //        std::cout << nodeInfo.childrenNodeIndices[2] << std::endl;
-    //        std::cout << nodeInfo.childrenNodeIndices[3] << std::endl;
-    //        std::cout << "-----" << std::endl;
-    //        ASSERT(glm::all(glm::lessThan(nodeInfo.childrenNodeIndices, glm::ivec4(0))), "A leaf node should have no children");
-    //        ASSERT(currNode->nodeStatus == LEAF, "A leaf node should have no children");
-    //    }
-    //}
 }

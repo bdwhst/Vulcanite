@@ -59,8 +59,9 @@ struct NaniteBVHNode
 	//std::vector<uint32_t> clusterIndices; 
 	std::array<int, CLUSTER_GROUP_MAX_SIZE> clusterIndices; // should try to assert index overflow
 	
-	int objectIdx = -1; // Only useful in instancing
 	int lodLevel = -1; 
+	int objectIdx = -1; // Only useful in instancing
+	int meshIdx = -1; // Only useful in instancing
 };
 
 /*

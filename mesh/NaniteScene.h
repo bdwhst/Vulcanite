@@ -19,6 +19,7 @@ public:
 	std::vector<BVHNodeInfo> bvhNodeInfos; // cleaned version
 	std::vector<uint32_t> clusterIndexOffsets; 
 	std::vector<uint32_t> depthCounts;
+	std::vector<uint32_t> depthLeafCounts; // Just for stats, not in usage
 	std::vector<uint32_t> initNodeInfoIndices;
 	uint32_t maxDepthCounts = 0;
 
@@ -44,8 +45,8 @@ public:
 		//return naniteObjects.back();
 	}
 
+	void createNaniteSceneInfo(vks::VulkanDevice* device, VkQueue transferQueue);
 	void createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
 	void createClusterInfos(vks::VulkanDevice* device, VkQueue transferQueue);
 	void createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transferQueue);
-	void buildClusterInfo();
 };

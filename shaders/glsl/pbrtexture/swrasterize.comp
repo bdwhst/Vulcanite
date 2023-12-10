@@ -46,13 +46,14 @@ layout (set = 0, binding = 6) uniform UBO
 	vec3 camPos;
 } ubo;
 
-int64_t packPixel(float depth, uint clusterID, uint triangleID)
+int64_t packPixel(float depth, uint clusterID, uint triangleID, uint objectID)
 {
 	int64_t ans = 0x0000000000000000L;
 	depth = 1.0-depth;
 	ans |= ((int64_t(floatBitsToInt(depth)))<<32);
-	ans |= ((int64_t(clusterID&0xFFFFFF))<<8);
-	ans |= int64_t(triangleID&0xFF);
+	ans |= int64_t((clusterID&0x7FFF)<<17);//15 bits of clusterID
+    ans |= int64_t((objectID&0x7FF)<<6);//11 bits of objectID
+	ans |= int64_t(triangleID&0x3F);//6 bits of triangleID
 	return ans;
 }
 
@@ -67,7 +68,7 @@ void updatePixel(ivec2 screenSize, ivec2 pos, int64_t val)
 	imageAtomicMax(swrImage,pos,val);
 }
 
-void rasterize(mat4 model, vec3 pos0, vec3 pos1, vec3 pos2, uint clusterID, uint triangleID)
+void rasterize(mat4 model, vec3 pos0, vec3 pos1, vec3 pos2, uint clusterID, uint triangleID, uint objectID)
 {
 	vec4 pos0H = ubo.proj*ubo.view*model*vec4(pos0,1.0);
 	vec4 pos1H = ubo.proj*ubo.view*model*vec4(pos1,1.0);
@@ -85,7 +86,7 @@ void rasterize(mat4 model, vec3 pos0, vec3 pos1, vec3 pos2, uint clusterID, uint
 	vec2 v0=pos0H.xy*screenSize;
 	vec2 v1=pos1H.xy*screenSize;
 	vec2 v2=pos2H.xy*screenSize;
-	if(insideOnePixel(v0,v1,v2)) updatePixel(screenSize,ivec2(v0),packPixel(z0,clusterID,triangleID));
+	if(insideOnePixel(v0,v1,v2)) updatePixel(screenSize,ivec2(v0),packPixel(z0,clusterID,triangleID,objectID));
 	vec2 maxPixel = max(max(ceil(v0),ceil(v1)),max(ceil(v0),ceil(v2)));
 	vec2 minPixel = min(min(floor(v0),floor(v1)),min(floor(v0),floor(v2)));
 
@@ -110,7 +111,7 @@ void rasterize(mat4 model, vec3 pos0, vec3 pos1, vec3 pos2, uint clusterID, uint
 		float ZX=ZY; 
 		for(float x=startPixel.x;x<maxPixel.x;x+=1)
 		{
-			if(CX0>=0&&CX1>=0&&CX2>=0) updatePixel(screenSize,ivec2(x,y),packPixel(ZX,clusterID,triangleID));
+			if(CX0>=0&&CX1>=0&&CX2>=0) updatePixel(screenSize,ivec2(x,y),packPixel(ZX,clusterID,triangleID,objectID));
 			CX0+=edge01.x;
 			CX1+=edge12.x;
 			CX2+=edge20.x;
@@ -136,5 +137,5 @@ void main()
 	vec3 pos2 = inVertices[v2i].pos;
 
 	uvec3 currID = inID[index];
-	rasterize(inModelMats[currID.x],pos0,pos1,pos2,currID.y,currID.z);
+	rasterize(inModelMats[currID.x],pos0,pos1,pos2,currID.y,currID.z,currID.x);
 }

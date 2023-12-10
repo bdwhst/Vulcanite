@@ -1071,9 +1071,9 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = 0; i <= 0; i++)
+		for (int i = -17; i <= 17; i++)
 		{
-			for (int j = 0; j <= 0; j++) 
+			for (int j = -17; j <= 17; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
@@ -2914,9 +2914,9 @@ public:
 	void createCullingBuffers()
 	{
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
-			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount * sizeof(uint32_t),
+			scene.sceneIndicesCount / 8 * sizeof(uint32_t),
 			&HWRIndicesBuffer.buffer,
 			&HWRIndicesBuffer.memory,
 			nullptr));
@@ -2924,7 +2924,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount / 3 * sizeof(glm::uvec3),
+			scene.sceneIndicesCount / 8 / 3 * sizeof(glm::uvec3),
 			&HWRIDBuffer.buffer,
 			&HWRIDBuffer.memory,
 			nullptr));
@@ -2932,7 +2932,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount * sizeof(uint32_t),
+			scene.sceneIndicesCount / 8 * sizeof(uint32_t),
 			&SWRIndicesBuffer.buffer,
 			&SWRIndicesBuffer.memory,
 			nullptr));
@@ -2940,7 +2940,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount / 3 * sizeof(glm::uvec3),
+			scene.sceneIndicesCount / 8 / 3 * sizeof(glm::uvec3),
 			&SWRIDBuffer.buffer,
 			&SWRIDBuffer.memory,
 			nullptr));

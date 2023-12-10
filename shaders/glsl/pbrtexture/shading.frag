@@ -224,10 +224,10 @@ void main()
     uint ID = imageLoad(visBuffer,screenPos).x;
 	if(ID==0xFFFFFFFF) discard;
     float depth = imageLoad(depthBuffer,screenPos).x;
-    uint clusterID = ID>>8;
-    uint triangleID = ID&0xFF;
+    uint clusterID = ID>>17;
+    uint triangleID = ID&0x3F;
 	Cluster currCluster = inCluster[clusterID];
-	uint objectId = 0;
+	uint objectId = (ID>>6)&0x7FF;
     uint globalTriangleID = currCluster.triangleStart+triangleID;
     uint v0i = inTriangles[globalTriangleID*3+0];
     uint v1i = inTriangles[globalTriangleID*3+1];

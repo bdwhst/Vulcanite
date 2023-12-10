@@ -29,8 +29,9 @@ void main()
     uvec3 currID = inID[gl_PrimitiveIDIn];
     mat4 model = inModelMats[currID.x];
     uint packedID = 0;
-	packedID |= ((currID.y&0xFFFFFF)<<8);
-	packedID |= (currID.z&0xFF);
+	packedID |= ((currID.y&0x7FFF)<<17);//15 bits of clusterID
+    packedID |= ((currID.x&0x7FF)<<6);//11 bits of objectID
+	packedID |= (currID.z&0x3F);//6 bits of triangleID
     for(uint i = 0; i < 3; i++){
         outID = packedID;
         gl_Position = ubo.projection * ubo.view * model * vec4(inPos[i], 1.0);

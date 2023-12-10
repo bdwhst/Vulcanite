@@ -106,28 +106,52 @@ void NaniteScene::createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue tra
 void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transferQueue)
 {
     sceneIndicesCount = 0;
-    maxClusterNums = 0;
-    clusterIndexOffsets.resize(naniteObjects.size());
+    clusterIndexOffsets.resize(naniteMeshes.size());
+    clusterIndexCounts.resize(naniteMeshes.size());
+    for (size_t i = 0; i < naniteMeshes.size(); i++)
+    {
+        auto& naniteMesh = naniteMeshes[i];
+        auto& instance = Instance(&naniteMesh, glm::mat4(1.0f));
+        instance.buildClusterInfo();
+		clusterIndexOffsets[i] = clusterInfo.size();
+		clusterInfo.insert(clusterInfo.end(), instance.clusterInfo.begin(), instance.clusterInfo.end());
+        clusterIndexCounts[i] = clusterInfo.size();
+        errorInfo.insert(errorInfo.end(), instance.errorInfo.begin(), instance.errorInfo.end());
+    }
+    ASSERT(clusterInfo.size() == errorInfo.size(), "clusterInfo.size() should be equal to errorInfo.size()");
+    //for (size_t i = 0; i < clusterInfo.size(); i++)
+        for (size_t i = 0; i < 200; i++)
+    {
+        std::cout << "i: " << i << std::endl;
+        std::cout << "errorInfo[i].centerR: " << errorInfo[i].centerR.x << " " << errorInfo[i].centerR.y << " " << errorInfo[i].centerR.z << " " << errorInfo[i].centerR.w << std::endl;
+        std::cout << "errorInfo[i].centerRP: " << errorInfo[i].centerRP.x << " " << errorInfo[i].centerRP.y << " " << errorInfo[i].centerRP.z << " " << errorInfo[i].centerRP.w << std::endl;
+        std::cout << "errorInfo[i].errorWorld: " << errorInfo[i].errorWorld.x << " " << errorInfo[i].errorWorld.y << std::endl;
+        ASSERT(abs(errorInfo[i].centerR.x) > FLT_EPSILON, "Invalid errorR");
+    }
+        std::cout << alignof(ClusterInfo) << std::endl;
+        std::cout << sizeof(ClusterInfo) << std::endl;
+    //clusterIndexOffsets.resize(naniteObjects.size());
     for (int i = 0; i < naniteObjects.size(); ++i) {
         auto& naniteObject = naniteObjects[i];
-        naniteObject.buildClusterInfo();
+    //    naniteObject.buildClusterInfo();
         auto referenceMeshIndex = std::find(naniteMeshes.begin(), naniteMeshes.end(), *(naniteObject.referenceMesh)) - naniteMeshes.begin();
-        clusterIndexOffsets[i] = clusterInfo.size();
-        std::cout << "i " << i << " clusterIndexOffsets[i] " << clusterIndexOffsets[i] << std::endl;
-        for (auto ci : naniteObject.clusterInfo)
-        {
-            // TODO: Should adjust this part when multiple meshes are imported
-            //auto referenceMeshIndex = 0;
-            if (referenceMeshIndex != 0) {
-                ci.triangleIndicesStart += indexCounts[referenceMeshIndex-1] / 3;
-                ci.triangleIndicesEnd += indexCounts[referenceMeshIndex-1] / 3;
-            }
-            ci.objectIdx = i;
-            clusterInfo.push_back(ci);
-        }
-        errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
+    //    clusterIndexOffsets[i] = clusterInfo.size();
+    //    std::cout << "i " << i << " clusterIndexOffsets[i] " << clusterIndexOffsets[i] << std::endl;
+    //    for (auto ci : naniteObject.clusterInfo)
+    //    {
+    //        // TODO: Should adjust this part when multiple meshes are imported
+    //        //auto referenceMeshIndex = 0;
+    //        if (referenceMeshIndex != 0) {
+    //            ci.triangleIndicesStart += indexCounts[referenceMeshIndex-1] / 3;
+    //            ci.triangleIndicesEnd += indexCounts[referenceMeshIndex-1] / 3;
+    //        }
+    //        ci.objectIdx = i;
+    //        clusterInfo.push_back(ci);
+    //    }
+    //    errorInfo.insert(errorInfo.end(), naniteObject.errorInfo.begin(), naniteObject.errorInfo.end());
         sceneIndicesCount += indexCounts[referenceMeshIndex];
-        maxClusterNums += naniteObject.referenceMesh->meshes[0].clusterNum;
+        maxClusterNum += clusterIndexCounts[referenceMeshIndex];
+    //    maxClusterNums += naniteObject.referenceMesh->meshes[0].clusterNum;
     }
 }
 
@@ -212,6 +236,7 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         auto & nodeInfo = bvhNodeInfos[i];
         nodeInfo.pMinWorld = currNode->pMin;
         nodeInfo.pMaxWorld = currNode->pMax;
+        nodeInfo.objectId = currNode->objectIdx;
         nodeInfo.errorWorld.x = currNode->normalizedlodError;
         nodeInfo.errorWorld.y = currNode->parentNormalizedError;
         nodeInfo.errorRP = currNode->parentBoundingSphere;
@@ -231,7 +256,8 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
         {
             if (currNode->clusterIndices[i] >= 0) {
-                nodeInfo.clusterIndices[i] = currNode->clusterIndices[i] + clusterIndexOffsets[currNode->objectIdx];
+                //nodeInfo.clusterIndices[i] = currNode->clusterIndices[i] + clusterIndexOffsets[currNode->objectIdx];
+                nodeInfo.clusterIndices[i] = currNode->clusterIndices[i];
             }
         }
         ASSERT(currNode->nodeStatus == LEAF || nodeInfo.clusterIndices[0] == -1, "A non-leaf node should have no cluster index");
@@ -261,7 +287,7 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
 					//std::cout << indent
                     //    << " cluster: " << nodeInfo.clusterIndices[i]
                     //    << std::endl;
-                    ASSERT(clusterIndexSets.find(nodeInfo.clusterIndices[i]) != clusterIndexSets.end(), "Already removed, repeat index!");
+                    //ASSERT(clusterIndexSets.find(nodeInfo.clusterIndices[i]) != clusterIndexSets.end(), "Already removed, repeat index!");
                     clusterIndexSets.erase(nodeInfo.clusterIndices[i]);
 				}
                 else {
@@ -296,7 +322,6 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
     //ASSERT(0, "Stop here");
     maxDepthCounts = std::max_element(depthCounts.begin(), depthCounts.end())[0];
     std::cout << "maxDepthCounts: " << maxDepthCounts << std::endl;
-    std::cout << "maxClusterNums: " << maxClusterNums << std::endl;
     initNodeInfoIndices.resize(depthCounts[0] + 1); // Init node info indices by depth 0 node count
     initNodeInfoIndices[0] = depthCounts[0];
     for (size_t i = 1; i <= depthCounts[0]; i++)

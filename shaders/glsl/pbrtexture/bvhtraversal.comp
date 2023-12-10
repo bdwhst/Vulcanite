@@ -9,6 +9,7 @@ layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 struct BVHNodeInfo{
     vec3 pMin;
     vec3 pMax;
+    uint objectId;
     vec4 errorR;
     vec4 errorRP;
     vec2 errorWorld;
@@ -66,6 +67,10 @@ layout(binding = 6) uniform UBOMats2 {
     vec3 camUp;
     vec3 camRight;
 } ubomats2;
+
+layout(binding = 7) buffer clusterObjectIndexBuffer{
+    uint clusterObjectIndices[];
+};
 
 layout(push_constant) uniform PushConstants {
     vec2 screenSize;
@@ -235,29 +240,29 @@ bool errorCulling(BVHNodeInfo b)
     vec3 center;
     float R;
 
-    center = b.errorRP.xyz;
-    R = b.errorRP.w;
-    vec3 p0 = vec3(b.pMin.x,b.pMin.y,b.pMin.z);
-    vec3 p1 = vec3(b.pMax.x,b.pMin.y,b.pMin.z);
-    vec3 p2 = vec3(b.pMin.x,b.pMax.y,b.pMin.z);
-    vec3 p3 = vec3(b.pMin.x,b.pMin.y,b.pMax.z);
-    vec3 p4 = vec3(b.pMax.x,b.pMax.y,b.pMin.z);
-    vec3 p5 = vec3(b.pMin.x,b.pMax.y,b.pMax.z);
-    vec3 p6 = vec3(b.pMax.x,b.pMin.y,b.pMax.z);
-    vec3 p7 = vec3(b.pMax.x,b.pMax.y,b.pMax.z);
-
-    float err = b.errorWorld.y * getScreenBoundRadiusSq(p0,R);
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p1,R));
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p2,R));
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p3,R));
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p4,R));
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p5,R));
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p6,R));
-    err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p7,R));
+    //center = b.errorRP.xyz;
+    //R = b.errorRP.w;
+    //vec3 p0 = vec3(b.pMin.x,b.pMin.y,b.pMin.z);
+    //vec3 p1 = vec3(b.pMax.x,b.pMin.y,b.pMin.z);
+    //vec3 p2 = vec3(b.pMin.x,b.pMax.y,b.pMin.z);
+    //vec3 p3 = vec3(b.pMin.x,b.pMin.y,b.pMax.z);
+    //vec3 p4 = vec3(b.pMax.x,b.pMax.y,b.pMin.z);
+    //vec3 p5 = vec3(b.pMin.x,b.pMax.y,b.pMax.z);
+    //vec3 p6 = vec3(b.pMax.x,b.pMin.y,b.pMax.z);
+    //vec3 p7 = vec3(b.pMax.x,b.pMax.y,b.pMax.z);
+    //
+    //float err = b.errorWorld.y * getScreenBoundRadiusSq(p0,R);
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p1,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p2,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p3,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p4,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p5,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p6,R));
+    //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p7,R));
 	//return err <= pcs.threshold;
     center = 0.5 * (b.pMin + b.pMax);
 	//R = max(max(b.pMax.x - b.pMin.x, b.pMax.y - b.pMin.y), b.pMax.z - b.pMin.z);
-	R = length(b.pMax - b.pMin);
+	R = b.errorRP.w;
 	return b.errorWorld.y * getScreenBoundRadiusSq(center, R)<= pcs.threshold;
     //return false;
 }
@@ -271,6 +276,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices0[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -280,6 +286,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices1[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -289,6 +296,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices2[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -298,6 +306,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices3[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -307,6 +316,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices4[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -316,6 +326,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices5[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -325,6 +336,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices6[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
     for(int i =0; i < 4; ++i){
@@ -334,6 +346,7 @@ void addClusterIndex(BVHNodeInfo nodeInfo)
         else{
             uint index = atomicAdd(clusterSize, 1);
             clusters[index] = nodeInfo.clusterIndices7[i];
+            clusterObjectIndices[index] = nodeInfo.objectId;
         }
     }
 }
@@ -355,6 +368,7 @@ void main(){
     //}
     // error culling
     //culled = culled || errorCulling(nodeInfo);
+    //if (errorCulling(nodeInfo)) return;
     //if (errorCulling(nodeInfo)){
 	//	atomicAdd(errorCullingNum, 1);
 	//}

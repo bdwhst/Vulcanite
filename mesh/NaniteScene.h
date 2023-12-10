@@ -21,7 +21,9 @@ public:
 	std::vector<uint32_t> depthCounts;
 	std::vector<uint32_t> initNodeInfoIndices;
 	uint32_t maxDepthCounts = 0;
-	uint32_t maxClusterNums = 0;
+
+	std::vector<uint32_t> clusterIndexCounts;
+	uint32_t maxClusterNum = 0;
 
 	uint32_t maxLodLevelNum = -1;
 

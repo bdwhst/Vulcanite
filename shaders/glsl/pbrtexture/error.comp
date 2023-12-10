@@ -6,9 +6,9 @@ layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 
 struct ErrorInfo
 {
+    vec2 errorWorld;//node error and parent error in world
     vec4 centerR;
     vec4 centerRP;
-    vec2 errorWorld;//node error and parent error in world
 };
 
 layout(std430, set = 0, binding = 0) buffer readonly WorldError {
@@ -33,6 +33,14 @@ layout(set = 0, binding = 3) buffer ClusterIndices{
     uint errorCullingNum;
     uint culledClusterIndices[];
 } culledClusters;
+
+layout(set = 0, binding = 4) buffer clusterObjectIndexBuffer{
+    uint clusterObjectIndices[];
+};
+
+layout(set = 0, binding = 5) buffer readonly ModelMatIn{
+	mat4 inModelMats[];
+};
 
 layout(push_constant) uniform PushConstants {
     int numClusters;
@@ -61,17 +69,35 @@ void main()
     //uint index = gl_GlobalInvocationID.x;
     //if(index >= pcs.numClusters) return;
     if (gl_GlobalInvocationID.x >= culledClusters.culledClusterSize) return;
-    uint index = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
-    ErrorInfo error = idata[index];
+    uint clusterIndex = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
+    uint objectId = clusterObjectIndices[gl_GlobalInvocationID.x];
+    ErrorInfo error = idata[clusterIndex];
     vec3 center;
     float R;
+    
+    //error.centerR.xyz = (inModelMats[objectId] * vec4(error.centerR.xyz,1)).xyz;
+    //error.centerRP.xyz = (inModelMats[objectId] * vec4(error.centerRP.xyz,1)).xyz;
 
-    center = error.centerR.xyz;
-    R = error.centerR.w;
-    odata[index].x = error.errorWorld.x * getScreenBoundRadiusSq(center,R);
 
-    center = error.centerRP.xyz;
-    R = error.centerRP.w;
-    odata[index].y = error.errorWorld.y * getScreenBoundRadiusSq(center,R);
+    center = (inModelMats[objectId] * vec4(error.centerR.xyz,1)).xyz;
+    R = length(inModelMats[objectId] * vec4(error.centerR.w,0,0,0));
+
+    odata[gl_GlobalInvocationID.x].x = error.errorWorld.x * getScreenBoundRadiusSq(center,R);
+    
+    center = (inModelMats[objectId] * vec4(error.centerRP.xyz,1)).xyz;
+    R = length(inModelMats[objectId] * vec4(error.centerRP.w,0,0,0));
+    //center = error.centerR.xyz;
+    //R = error.centerR.w;
+    odata[gl_GlobalInvocationID.x].y = error.errorWorld.y * getScreenBoundRadiusSq(center,R);
+
+    //center = (inModelMats[objectId] * vec4(error.centerR.xyz,1)).xyz;
+    //R = length(inModelMats[objectId] * vec4(error.centerR.w,0,0,0));
+    //odata[index].x = getScreenBoundRadiusSq(center,R);
+    //
+    //center = error.centerR.xyz;
+    //R = error.centerR.w;
+    //odata[index].y = getScreenBoundRadiusSq(center,R);
+    //odata[index].xy = error.errorWorld.xy;
+    //odata[index].xy = error.errorWorld.xy;
 }
 

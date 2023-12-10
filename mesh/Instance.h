@@ -20,6 +20,7 @@ struct BVHNodeInfo {
     }
     alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
     alignas(16) glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
+    alignas(4) uint32_t objectId;
     alignas(16)  glm::vec4 errorR;//node error and parent error. Node error should be non-neccessary, kept for now
     alignas(16)  glm::vec4 errorRP;//node error and parent error. Node error should be non-neccessary, kept for now
     alignas(8)  glm::vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
@@ -47,9 +48,9 @@ struct ClusterInfo {
 
 struct ErrorInfo
 {
+    alignas(8)  glm::vec2 errorWorld;//node error and parent error in world
     alignas(16) glm::vec4 centerR;
     alignas(16) glm::vec4 centerRP;
-    alignas(8)  glm::vec2 errorWorld;//node error and parent error in world
 };
 
 //#define DEBUG_LOD_START 0

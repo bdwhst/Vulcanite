@@ -60,6 +60,14 @@ layout(set = 0, binding = 8) buffer ClusterIndices{
     uint culledClusterIndices[];
 } culledClusters;
 
+layout(set = 0, binding = 9) buffer clusterObjectIndexBuffer{
+    uint clusterObjectIndices[];
+};
+
+layout(set = 0, binding = 10) buffer readonly ModelMatIn{
+	mat4 inModelMats[];
+};
+
 layout(push_constant) uniform PushConstants {
     int numClusters;
     float threshold;
@@ -215,10 +223,14 @@ void main()
     //if(index >= pcs.numClusters) return;
 
     if (gl_GlobalInvocationID.x >= culledClusters.culledClusterSize) return;
-    uint index = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
+    uint clusterIndex = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
+    uint objectId = clusterObjectIndices[gl_GlobalInvocationID.x];
 
     bool culled = false;
-    Cluster currCluster = indata[index];
+    Cluster currCluster = indata[clusterIndex];
+
+    currCluster.pMin = vec3(inModelMats[objectId] * vec4(currCluster.pMin, 1.0));
+    currCluster.pMax = vec3(inModelMats[objectId] * vec4(currCluster.pMax, 1.0));
 
     // TODO: BVH traverse
     // First work group: Just processing the first level of BVH
@@ -233,7 +245,7 @@ void main()
         culled = culled || frustrumCulling(currCluster);
         culled = culled || occlusionCulling(currCluster);
     }
-    culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
+    culled = culled || (errorData[gl_GlobalInvocationID.x].y <= pcs.threshold||errorData[gl_GlobalInvocationID.x].x > pcs.threshold);
     //culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
@@ -243,7 +255,7 @@ void main()
     }
     barrier();
 
-    uint totalVertices = culled?0:(indata[index].triangleEnd - indata[index].triangleStart)*3;
+    uint totalVertices = culled?0:(indata[clusterIndex].triangleEnd - indata[clusterIndex].triangleStart)*3;
     //TODO: reduce atomicity with shared memory
     uint localIdx = atomicAdd(local_size, totalVertices);
     barrier();
@@ -258,14 +270,14 @@ void main()
     {
         for(uint i = 0; i < totalVertices / 3; i++)
         {
-            uint inIdx = indata[index].triangleStart * 3 + 3 * i;
+            uint inIdx = indata[clusterIndex].triangleStart * 3 + 3 * i;
             uint outIdx = group_start + localIdx + 3 * i;
             outTriangles[outIdx + 0] = inTriangles[inIdx + 0];
             outTriangles[outIdx + 1] = inTriangles[inIdx + 1];
             outTriangles[outIdx + 2] = inTriangles[inIdx + 2];
-            outObjectIds[outIdx + 0] = currCluster.objectId;
-            outObjectIds[outIdx + 1] = currCluster.objectId;
-            outObjectIds[outIdx + 2] = currCluster.objectId;
+            outObjectIds[outIdx + 0] = objectId;
+            outObjectIds[outIdx + 1] = objectId;
+            outObjectIds[outIdx + 2] = objectId;
             //int s = int(currCluster.objectId == 0) * 2 - 1;
             //outObjectIds[outIdx + 0] = s * int(inTriangles[inIdx + 0]);
             //outObjectIds[outIdx + 1] = s * int(inTriangles[inIdx + 1]);

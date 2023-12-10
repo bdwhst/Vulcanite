@@ -168,6 +168,7 @@ public:
 	vks::Buffer currNodeInfosBuffer;
 	vks::Buffer nextNodeInfosBuffer;
 	vks::Buffer culledClusterIndicesBuffer; // Cluster indices after BVH culling
+	vks::Buffer culledClusterObjectIndicesBuffer;
 
 	vks::Buffer culledIndicesBuffer;
 	vks::Buffer culledObjectIndicesBuffer;
@@ -319,7 +320,7 @@ public:
 			bufferBarrier.size = VK_WHOLE_SIZE;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 			
-			vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, scene.clusterInfo.size() * sizeof(uint32_t), 0);
+			vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, sizeof(uint32_t), 0);
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -389,6 +390,16 @@ public:
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = culledClusterObjectIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -400,7 +411,8 @@ public:
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, errorProjPipeline);
-			errorPushConstants.numClusters = clusterinfos.size();
+			//errorPushConstants.numClusters = clusterinfos.size();
+			errorPushConstants.numClusters = scene.maxClusterNum;
 			errorPushConstants.screenSize = glm::vec2(width, height);
 			vkCmdPushConstants(drawCmdBuffers[i], errorProjPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ErrorPushConstants), &errorPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, errorProjPipelineLayout, 0, 1, &descManager->getSet("errorProj", 0), 0, 0);
@@ -435,7 +447,7 @@ public:
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
 			cullingPushConstants.threshold = thresholdInt / thresholdIntDiv;
-			cullingPushConstants.numClusters = clusterinfos.size();
+			cullingPushConstants.numClusters = scene.maxClusterNum;
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &descManager->getSet("culling", 0), 0, 0);
 			//vkDeviceWaitIdle(device);
@@ -703,9 +715,9 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -5; i <= 5; i++)
+		for (int i = -7; i <= 7; i++)
 		{
-			for (int j = -5; j <= 5; j++) 
+			for (int j = -7; j <= 7; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.3f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
@@ -717,10 +729,10 @@ public:
 		// Uncomment this part for normal scene
 		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
 		//auto & instance2 = Instance(&naniteMesh, modelMats[1]);
-		//auto & instance3 = Instance(&naniteMesh, modelMats[2]);
+		////auto & instance3 = Instance(&naniteMesh, modelMats[2]);
 		//scene.naniteObjects.push_back(instance1);
 		//scene.naniteObjects.push_back(instance2);
-		//scene.naniteObjects.push_back(instance3);
+		////scene.naniteObjects.push_back(instance3);
 
 		// Uncomment this part for normal multi-mesh scene
 		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
@@ -832,6 +844,7 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 7),
 		};
 		manager->addSetLayout("bvhTraversal", setLayoutBindings, 2);
 
@@ -845,6 +858,8 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 7),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 8),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 9),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 10),
 		};
 		manager->addSetLayout("culling", setLayoutBindings, 1);
 
@@ -853,6 +868,8 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
 		};
 		manager->addSetLayout("errorProj", setLayoutBindings, 1);
 
@@ -961,6 +978,7 @@ public:
 		culledClusterIndicesBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		errorUniformBuffer.setupDescriptor();
+		culledClusterObjectIndicesBuffer.setupDescriptor();
 		manager->writeToSet("bvhTraversal", 0, 0, &bvhNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 1, &currNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 2, &nextNodeInfosBuffer.descriptor);
@@ -968,6 +986,7 @@ public:
 		manager->writeToSet("bvhTraversal", 0, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 6, &errorUniformBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 7, &culledClusterObjectIndicesBuffer.descriptor);
 		
 		manager->writeToSet("bvhTraversal", 1, 0, &bvhNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 1, &nextNodeInfosBuffer.descriptor);
@@ -976,6 +995,7 @@ public:
 		manager->writeToSet("bvhTraversal", 1, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 6, &errorUniformBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 7, &culledClusterObjectIndicesBuffer.descriptor);
 
 		//Culling
 		clustersInfoBuffer.setupDescriptor();
@@ -984,6 +1004,8 @@ public:
 		cullingUniformBuffer.setupDescriptor();
 		projectedErrorBuffer.setupDescriptor();
 		culledObjectIndicesBuffer.setupDescriptor();
+		culledClusterObjectIndicesBuffer.setupDescriptor();
+		modelMatsBuffer.setupDescriptor();
 		VkDescriptorBufferInfo inputIndicesInfo{};
 		inputIndicesInfo.buffer = scene.indices.buffer;
 		inputIndicesInfo.range = VK_WHOLE_SIZE;
@@ -996,15 +1018,21 @@ public:
 		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
 		manager->writeToSet("culling", 0, 7, &culledObjectIndicesBuffer.descriptor);
 		manager->writeToSet("culling", 0, 8, &culledClusterIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 9, &culledClusterObjectIndicesBuffer.descriptor);
+		manager->writeToSet("culling", 0, 10, &modelMatsBuffer.descriptor);
 
 		//Error projection
 		errorInfoBuffer.setupDescriptor();
 		projectedErrorBuffer.setupDescriptor();
 		errorUniformBuffer.setupDescriptor();
+		culledClusterObjectIndicesBuffer.setupDescriptor();
+		modelMatsBuffer.setupDescriptor();
 		manager->writeToSet("errorProj", 0, 0, &errorInfoBuffer.descriptor);
 		manager->writeToSet("errorProj", 0, 1, &projectedErrorBuffer.descriptor);
 		manager->writeToSet("errorProj", 0, 2, &errorUniformBuffer.descriptor);
 		manager->writeToSet("errorProj", 0, 3, &culledClusterIndicesBuffer.descriptor);
+		manager->writeToSet("errorProj", 0, 4, &culledClusterObjectIndicesBuffer.descriptor);
+		manager->writeToSet("errorProj", 0, 5, &modelMatsBuffer.descriptor);
 
 	}
 
@@ -2250,14 +2278,22 @@ public:
 			&nextNodeInfosBuffer.memory,
 			nullptr));
 
-		std::cout << "scene.maxClusterNums: " << scene.maxClusterNums << std::endl;
-		std::cout << scene.maxClusterNums * sizeof(uint32_t) << std::endl;
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.clusterInfo.size() * sizeof(uint32_t),
+			scene.maxClusterNum * sizeof(uint32_t),
 			&culledClusterIndicesBuffer.buffer,
 			&culledClusterIndicesBuffer.memory,
+			nullptr));
+
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scene.maxClusterNum * sizeof(uint32_t),
+			//scene.sceneIndicesCount * sizeof(uint16_t),
+			//width * height * CLUSTER_MAX_SIZE * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
+			&culledClusterObjectIndicesBuffer.buffer,
+			&culledClusterObjectIndicesBuffer.memory,
 			nullptr));
 	}
 
@@ -2362,7 +2398,8 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.errorInfo.size() * sizeof(glm::vec2),
+			//scene.errorInfo.size() * sizeof(glm::vec2),
+			scene.maxClusterNum * sizeof(glm::vec2),
 			&projectedErrorBuffer.buffer,
 			&projectedErrorBuffer.memory,
 			nullptr));

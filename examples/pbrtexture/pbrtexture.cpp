@@ -184,7 +184,7 @@ public:
 		uint32_t firstIndex;
 		uint32_t vertexOffset;
 		uint32_t firstInstance;
-	}drawIndexedIndirect;
+	}hwrDrawIndexedIndirect;
 
 	struct UBOParams {
 		glm::vec4 lights[4];
@@ -204,11 +204,12 @@ public:
 	struct CullingPushConstants {
 		int numClusters;
 		float threshold;
-		bool useFrustrumOcclusionCulling = true;
+		alignas(4) bool useFrustrumOcclusionCulling = true;
+		alignas(4) bool useSoftwareRasterization = true;
 	} cullingPushConstants;
 
 	struct RenderingPushConstants {
-		int vis_clusters;
+		int vis_clusters = 0;
 	} renderingPushConstants;
 
 	vks::Buffer HWRIndicesBuffer;
@@ -220,8 +221,15 @@ public:
 	vks::Buffer modelMatsBuffer;
 	vks::Buffer clustersInfoBuffer;
 	vks::Buffer cullingUniformBuffer;
-	vks::Buffer drawIndexedIndirectBuffer;
+	vks::Buffer hwrDrawIndexedIndirectBuffer;
 
+	struct SWRIndirectBuffer {
+		uint32_t x = 0;
+		uint32_t y = 0;
+		uint32_t z = 0;
+	}swrIndirectBuffer;
+
+	vks::Buffer swrIndirectDispatchBuffer;
 	vks::Buffer swrNumVerticesBuffer;
 
 	struct ErrorPushConstants {
@@ -427,7 +435,7 @@ public:
 			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			bufferBarrier.buffer = drawIndexedIndirectBuffer.buffer;
+			bufferBarrier.buffer = hwrDrawIndexedIndirectBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
 
@@ -489,11 +497,20 @@ public:
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipelineLayout, 0, 1, &descManager->getSet("clearImage", 0), 0, 0);
 			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = swrIndirectDispatchBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
 			imageMemBarrier.image = SWRBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			imageMemBarrier.subresourceRange.baseMipLevel = 0;
 			imageMemBarrier.subresourceRange.levelCount = 1;
@@ -504,12 +521,13 @@ public:
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipelineLayout, 0, 1, &descManager->getSet("swRast", 0), 0, 0);
-			vkCmdDispatch(drawCmdBuffers[i], (scene.visibleIndicesCount / 3 + 31) / 32, 1, 1);
+			vkCmdDispatchIndirect(drawCmdBuffers[i], swrIndirectDispatchBuffer.buffer, 0);
+			//vkCmdDispatch(drawCmdBuffers[i], (scene.visibleIndicesCount / 3 + 31) / 32, 1, 1);
 
 			imageMemBarrier.image = SWRBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			imageMemBarrier.subresourceRange.baseMipLevel = 0;
@@ -549,7 +567,7 @@ public:
 			vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			VkDeviceSize offsets[1] = { 0 };
 			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
 			vkCmdEndRenderPass(drawCmdBuffers[i]);
 
 			bufferBarrier.srcAccessMask = VK_ACCESS_INDEX_READ_BIT;
@@ -599,6 +617,7 @@ public:
 			*  Merge Rasterize results
 			*
 			*/
+			vkCmdPushConstants(drawCmdBuffers[i], mergeRastPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipelineLayout, 0, 1, &descManager->getSet("mergeRast", 0), 0, NULL);
 			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
@@ -675,6 +694,7 @@ public:
 			// Objects shading
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipelineLayout, 0, 1, &descManager->getSet("shading", 0), 0, 0);
+			vkCmdPushConstants(drawCmdBuffers[i], shadingPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
 
 			// Objects
@@ -769,6 +789,19 @@ public:
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 
 
+			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
+			imageMemBarriers[0].image = textures.hizbuffer.image;
+			imageMemBarriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarriers[0].subresourceRange.baseMipLevel = 0;
+			imageMemBarriers[0].subresourceRange.levelCount = 1;
+			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
+			imageMemBarriers[0].subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, imageMemBarriers.data());
+
 			/*
 			*
 			*  Top view
@@ -799,7 +832,7 @@ public:
 				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
 				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
 				vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], drawIndexedIndirectBuffer.buffer, 0, 1, 0);
+				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
 				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
 				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
@@ -898,11 +931,11 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -1; i <= 0; i++)
+		for (int i = -6; i <= 6; i++)
 		{
-			for (int j = -1; j <= 0; j++) 
+			for (int j = -6; j <= 6; j++) 
 			{
-				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
+				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
 				modelMats.emplace_back(modelMat);
 				scene.naniteObjects.emplace_back(instance);
@@ -1042,9 +1075,9 @@ public:
 		manager->addSetLayout("errorProj", setLayoutBindings, 1);
 
 		setLayoutBindings = {
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 0),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 1),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, 2),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_GEOMETRY_BIT, 2),
 		};
 		manager->addSetLayout("hwRast", setLayoutBindings, 1);
 
@@ -1061,6 +1094,8 @@ public:
 
 		setLayoutBindings = {
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, 0),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
 		};
 		manager->addSetLayout("clearImage", setLayoutBindings, 1);
 
@@ -1190,7 +1225,7 @@ public:
 		clustersInfoBuffer.setupDescriptor();
 		HWRIndicesBuffer.setupDescriptor();
 		HWRIDBuffer.setupDescriptor();
-		drawIndexedIndirectBuffer.setupDescriptor();
+		hwrDrawIndexedIndirectBuffer.setupDescriptor();
 		cullingUniformBuffer.setupDescriptor();
 		projectedErrorBuffer.setupDescriptor();
 		SWRIndicesBuffer.setupDescriptor();
@@ -1204,7 +1239,7 @@ public:
 		manager->writeToSet("culling", 0, 0, &clustersInfoBuffer.descriptor);
 		manager->writeToSet("culling", 0, 1, &inputIndicesInfo);
 		manager->writeToSet("culling", 0, 2, &HWRIndicesBuffer.descriptor);
-		manager->writeToSet("culling", 0, 3, &drawIndexedIndirectBuffer.descriptor);
+		manager->writeToSet("culling", 0, 3, &hwrDrawIndexedIndirectBuffer.descriptor);
 		manager->writeToSet("culling", 0, 4, &cullingUniformBuffer.descriptor);
 		manager->writeToSet("culling", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("culling", 0, 6, &projectedErrorBuffer.descriptor);
@@ -1233,6 +1268,7 @@ public:
 		VkDescriptorImageInfo SWRImageInfo = {};
 		SWRImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 		SWRImageInfo.imageView = SWRBuffer.view;
+		swrIndirectDispatchBuffer.setupDescriptor();
 		manager->writeToSet("swRast", 0, 0, &inputVertInfo);
 		manager->writeToSet("swRast", 0, 1, &SWRIndicesBuffer.descriptor);
 		manager->writeToSet("swRast", 0, 2, &modelMatsBuffer.descriptor);
@@ -1243,6 +1279,8 @@ public:
 
 		//Clear image
 		manager->writeToSet("clearImage", 0, 0, &SWRImageInfo);
+		manager->writeToSet("clearImage", 0, 1, &swrNumVerticesBuffer.descriptor);
+		manager->writeToSet("clearImage", 0, 2, &swrIndirectDispatchBuffer.descriptor);
 
 		//Merge Rasterization Result
 		VkDescriptorImageInfo HWRImageInfo = {};
@@ -1370,22 +1408,21 @@ public:
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &hwrastPipelineLayout));
 			pipelineCI.layout = hwrastPipelineLayout;
 			pipelineCI.renderPass = hwRastRenderPass;
-			std::array<VkPipelineShaderStageCreateInfo, 4> shaderStages1;
+			std::array<VkPipelineShaderStageCreateInfo, 3> shaderStages1;
 			shaderStages1[0] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 			shaderStages1[1] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
-			shaderStages1[2] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.tesc.spv", VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
-			shaderStages1[3] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.tese.spv", VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+			shaderStages1[2] = loadShader(getShadersPath() + "pbrtexture/hwrasterize.geom.spv", VK_SHADER_STAGE_GEOMETRY_BIT);
 			pipelineCI.pStages = shaderStages1.data();
-			pipelineCI.stageCount = 4;
-			rasterizationState.cullMode = VK_CULL_MODE_NONE;
-			VkPipelineTessellationStateCreateInfo tessellationState = {};
-			tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
-			tessellationState.patchControlPoints = 3; // Number of control points per patch
-			pipelineCI.pTessellationState = &tessellationState;
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+			pipelineCI.stageCount = 3;
+			rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
+			//VkPipelineTessellationStateCreateInfo tessellationState = {};
+			//tessellationState.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+			//tessellationState.patchControlPoints = 3; // Number of control points per patch
+			//pipelineCI.pTessellationState = &tessellationState;
+			//inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &hwrastPipeline));
-			pipelineCI.pTessellationState = nullptr;
-			inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+			//pipelineCI.pTessellationState = nullptr;
+			//inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 		}
 
 		{
@@ -1410,17 +1447,26 @@ public:
 			pipelineCI.pStages = shaderStages.data();
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &debugQuadPipeline));
 		}
-
+		
 		{
+			// Shading pipeline
+			push_constant.size = sizeof(RenderingPushConstants);
+			push_constant.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("shading"), 1);
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &shadingPipelineLayout));
+
 			pipelineCI.layout = shadingPipelineLayout;
 			pipelineCI.renderPass = renderPass;
 			shaderStages[0] = loadShader(getShadersPath() + "pbrtexture/shading.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
 			shaderStages[1] = loadShader(getShadersPath() + "pbrtexture/shading.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+			pipelineCI.stageCount = 2;
+			pipelineCI.pStages = shaderStages.data();
 			VK_CHECK_RESULT(vkCreateGraphicsPipelines(device, pipelineCache, 1, &pipelineCI, nullptr, &shadingPipeline));
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
 		}
-
+		//ASSERT(false, "debug interrupt");
 		{
 			// Hi-Z Buffer build pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/genhiz.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
@@ -1496,7 +1542,7 @@ public:
 		}
 
 		{
-			//Error projection pipeline
+			// Error projection pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/error.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
 			VkPushConstantRange push_constant{};
 			push_constant.size = sizeof(ErrorPushConstants);
@@ -1516,7 +1562,12 @@ public:
 		{
 			// Merge Rasterize result
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/merger.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			VkPushConstantRange push_constant{};
+			push_constant.size = sizeof(RenderingPushConstants);
+			push_constant.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("mergeRast"), 1);
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant;
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &mergeRastPipelineLayout));
 
 			VkComputePipelineCreateInfo pipelineCreateInfo = {};
@@ -2580,33 +2631,42 @@ public:
 		cullingUniformBuffer.device = device;
 		VK_CHECK_RESULT(cullingUniformBuffer.map());
 
-		drawIndexedIndirect.firstIndex = 0;
-		drawIndexedIndirect.firstInstance = 0;
-		drawIndexedIndirect.indexCount = models.object.indexBuffer.size();
+		hwrDrawIndexedIndirect.firstIndex = 0;
+		hwrDrawIndexedIndirect.firstInstance = 0;
+		hwrDrawIndexedIndirect.indexCount = models.object.indexBuffer.size();
 		//drawIndexedIndirect.indexCount = naniteMesh.meshes[naniteMesh.meshes.size()-1].mesh.n_faces();
-		drawIndexedIndirect.instanceCount = 2;
-		drawIndexedIndirect.vertexOffset = 0;
+		hwrDrawIndexedIndirect.instanceCount = 2;
+		hwrDrawIndexedIndirect.vertexOffset = 0;
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			sizeof(DrawIndexedIndirect),
-			&drawIndexedIndirectBuffer.buffer,
-			&drawIndexedIndirectBuffer.memory,
-			&drawIndexedIndirect));
+			&hwrDrawIndexedIndirectBuffer.buffer,
+			&hwrDrawIndexedIndirectBuffer.memory,
+			&hwrDrawIndexedIndirect));
 
-		drawIndexedIndirectBuffer.device = device;
-		VK_CHECK_RESULT(drawIndexedIndirectBuffer.map());
+		hwrDrawIndexedIndirectBuffer.device = device;
+		VK_CHECK_RESULT(hwrDrawIndexedIndirectBuffer.map());
 
-		uint32_t num_vertices = 0;
 
+		VK_CHECK_RESULT(vulkanDevice->createBuffer(
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			sizeof(SWRIndirectBuffer),
+			&swrIndirectDispatchBuffer.buffer,
+			&swrIndirectDispatchBuffer.memory,
+			nullptr));
+
+
+		uint32_t num_verts = 0;
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 			sizeof(uint32_t),
 			&swrNumVerticesBuffer.buffer,
 			&swrNumVerticesBuffer.memory,
-			&num_vertices));
+			&num_verts));
 
 		swrNumVerticesBuffer.device = device;
 		VK_CHECK_RESULT(swrNumVerticesBuffer.map());
@@ -2875,7 +2935,7 @@ public:
 
 		imageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		imageCI.imageType = VK_IMAGE_TYPE_2D;
-		imageCI.format = VK_FORMAT_R64_SINT;
+		imageCI.format = VK_FORMAT_R64_UINT;
 		imageCI.extent = { width, height, 1 };
 		imageCI.mipLevels = 1;
 		imageCI.arrayLayers = 1;
@@ -2895,7 +2955,7 @@ public:
 		imageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		imageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		imageViewCI.image = SWRBuffer.image;
-		imageViewCI.format = VK_FORMAT_R64_SINT;
+		imageViewCI.format = VK_FORMAT_R64_UINT;
 		imageViewCI.subresourceRange.baseMipLevel = 0;
 		imageViewCI.subresourceRange.levelCount = 1;
 		imageViewCI.subresourceRange.baseArrayLayer = 0;
@@ -3184,17 +3244,17 @@ public:
 	{
 		VulkanExampleBase::prepareFrame();
 
-		if (drawIndexedIndirectBuffer.mapped)
+		if (hwrDrawIndexedIndirectBuffer.mapped)
 		{
 			//
-			drawIndexedIndirect.indexCount = 0;
-			memcpy(drawIndexedIndirectBuffer.mapped, &drawIndexedIndirect, sizeof(DrawIndexedIndirect));
-			drawIndexedIndirectBuffer.flush();
+			hwrDrawIndexedIndirect.indexCount = 0;
+			memcpy(hwrDrawIndexedIndirectBuffer.mapped, &hwrDrawIndexedIndirect, sizeof(DrawIndexedIndirect));
+			hwrDrawIndexedIndirectBuffer.flush();
 
-			uint32_t numVertices = 0;
-			memcpy(swrNumVerticesBuffer.mapped, &numVertices, sizeof(uint32_t));
+			uint32_t zero = 0;
+			memcpy(swrNumVerticesBuffer.mapped, &zero, sizeof(uint32_t));
 			swrNumVerticesBuffer.flush();
-			//vkDeviceWaitIdle(device);
+			vkDeviceWaitIdle(device);
 		}
 
 		uboCullingMatrices.currView = camera.matrices.view;
@@ -3495,6 +3555,9 @@ public:
 			if (overlay->checkBox("Top View", &vis_topView)) {
 				rebuildCB = true;
 			}
+			if (overlay->checkBox("Software Rasterization", &cullingPushConstants.useSoftwareRasterization)) {
+				rebuildCB = true;
+			}
 			if (overlay->checkBox("Frustrum&Occlusion Culling", &cullingPushConstants.useFrustrumOcclusionCulling)) {
 				rebuildCB = true;
 			}
@@ -3502,7 +3565,7 @@ public:
 			{
 				rebuildCB = true;
 			}
-			if (overlay->sliderInt("Visualize Clusters", &renderingPushConstants.vis_clusters,0,2)) {
+			if (overlay->sliderInt("Visualize Clusters", &renderingPushConstants.vis_clusters,0,3)) {
 				rebuildCB = true;
 			}
 			if (overlay->sliderInt("LOD level", &vis_clusters_level, 0, naniteMesh.meshes.size() - 1))

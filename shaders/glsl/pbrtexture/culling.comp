@@ -60,7 +60,7 @@ layout(std430, set = 0, binding = 9) buffer writeonly IdOut_sw {
    uvec3 outIds_sw[ ];
 };
 
-layout(std430, set = 0, binding = 10) buffer writeonly NumVertices_sw {
+layout(std430, set = 0, binding = 10) buffer NumVertices_sw {
    uint indexCount;
 }numVertices_sw;
 
@@ -70,6 +70,7 @@ layout(push_constant) uniform PushConstants {
     int numClusters;
     float threshold;
     int useFrustrumOcclusion;
+    int useSoftwareRast;
 } pcs;
 
 // Naive AABB compute
@@ -244,8 +245,8 @@ void main()
         pixelArea = screenSpan.x*screenSpan.y;
     }
     culled = culled || (errorData[index].y <= pcs.threshold||errorData[index].x > pcs.threshold);
-    bool useSWR = pixelArea<128.0;
-    //bool useSWR = false;
+    bool useSWR = pcs.useSoftwareRast==1?pixelArea<256.0:false;
+    //bool useSWR = true;
     //if (currCluster.objectId == 1) culled = true;
     //culled = false;
     // if(gl_LocalInvocationID.x==0)

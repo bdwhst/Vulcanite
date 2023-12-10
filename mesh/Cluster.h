@@ -24,6 +24,8 @@ struct Cluster{
     float parentSurfaceArea = 0.0f;
     glm::vec3 boundingSphereCenter;
     float boundingSphereRadius;
+    glm::vec3 parentBoundingSphereCenter;
+    float parentBoundingSphereRadius;
 
     json toJson() const {
         return {

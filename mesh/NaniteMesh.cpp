@@ -119,6 +119,10 @@ void NaniteMesh::flattenBVH()
 		}
 		index++;
 		nodeQueue.pop();
+		std::cout << indent << "currNode->index: " << currNode->index 
+			<< std::endl << indent << "currNode->parentBoundingSphereCenter: " << currNode->parentBoundingSphere.x << " " << currNode->parentBoundingSphere.y << " " << currNode->parentBoundingSphere.z
+			<< std::endl << indent << "currNode->parentBoundingSphereRadius: " << currNode->parentBoundingSphere.w
+			<< std::endl;
 		if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
 		{
 			//std::cout << "Leaf node: " <<
@@ -162,6 +166,7 @@ void NaniteMesh::flattenBVH()
 		nodeInfo.pMin = currNode->pMin;
 		nodeInfo.parentNormalizedError = currNode->parentNormalizedError;
 		nodeInfo.normalizedlodError = currNode->normalizedlodError;
+		nodeInfo.parentBoundingSphere = currNode->parentBoundingSphere;
 		nodeInfo.nodeStatus = currNode->nodeStatus;
 		nodeInfo.depth = currNode->depth;
 		nodeInfo.index = currNode->index;
@@ -233,7 +238,6 @@ void NaniteMesh::generateNaniteInfo() {
 		meshLOD.buildClusterGraph();
 		meshLOD.colorClusterGraph(); // Cluster graph is needed to assign adjacent cluster different colors
 		meshLOD.generateClusterGroup();
-		meshLOD.createBVH();
 		currFaceNum = meshLOD.mesh.n_faces();
 		clusterGroupNum = meshLOD.clusterGroupNum;
 
@@ -262,7 +266,10 @@ void NaniteMesh::generateNaniteInfo() {
 	// Linearize DAG
 	
 	//flattenDAG();
-
+	for (size_t i = 0; i < meshes.size(); i++)
+	{
+		meshes[i].createBVH();
+	}
 	// Linearize BVH
 	flattenBVH();
 	

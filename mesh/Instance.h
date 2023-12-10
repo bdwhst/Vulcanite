@@ -18,9 +18,11 @@ struct BVHNodeInfo {
 			clusterIndices[i] = -1;
 		}
     }
-    alignas(8)  glm::vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
     alignas(16) glm::vec3 pMinWorld = glm::vec3(FLT_MAX);
     alignas(16) glm::vec3 pMaxWorld = glm::vec3(-FLT_MAX);
+    alignas(16)  glm::vec4 errorR;//node error and parent error. Node error should be non-neccessary, kept for now
+    alignas(16)  glm::vec4 errorRP;//node error and parent error. Node error should be non-neccessary, kept for now
+    alignas(8)  glm::vec2 errorWorld;//node error and parent error. Node error should be non-neccessary, kept for now
     alignas(16) glm::ivec4 childrenNodeIndices;
     // Note: The annotated one is wrong!
     //alignas(CLUSTER_GROUP_MAX_SIZE * 4) int clusterIndices[CLUSTER_GROUP_MAX_SIZE];
@@ -333,6 +335,9 @@ struct Instance {
             currNode->depth = nodeInfo.depth;
             currNode->parentNormalizedError = nodeInfo.parentNormalizedError;
             currNode->normalizedlodError = nodeInfo.normalizedlodError;
+            glm::vec3 parentCenter(nodeInfo.parentBoundingSphere);
+            parentCenter = glm::vec3(rootTransform * glm::vec4(parentCenter, 1.0));
+            currNode->parentBoundingSphere = glm::vec4(parentCenter, nodeInfo.parentBoundingSphere.w);
             // Apply transform
             currNode->pMin = glm::vec3(rootTransform * glm::vec4(nodeInfo.pMin, 1.0f));
             currNode->pMax = glm::vec3(rootTransform * glm::vec4(nodeInfo.pMax, 1.0f));
@@ -341,6 +346,11 @@ struct Instance {
             currNode->lodLevel = nodeInfo.lodLevel;
             ASSERT(currNode->nodeStatus == VIRTUAL_NODE || currNode->lodLevel >= 0, "lodLevel of any non-root node is negative!");
             ASSERT(currNode->nodeStatus == LEAF || currNode->clusterIndices[0] == -1, "non-leaf node also has a valid cluster index!");
+            std::string indent(nodeInfo.depth, '\t');
+            //std::cout << indent << nodeInfo.parentNormalizedError;
+            //std::cout  << indent << (currNode->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
+            //    << " pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z
+            //    << " pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z << std::endl;
             for (size_t j = 0; j < currNode->clusterIndices.size(); j++)
             {
                 //std::cout << flattenedBVHNodes[i]->clusterIndices[j] << std::endl;
@@ -366,7 +376,6 @@ struct Instance {
             }
             ASSERT(currNode->nodeStatus != INVALID, "Invalid nodes!");
 
-            std::string indent(nodeInfo.depth, '\t');
             //std::cout << indent << (flattenedBVHNodes[i]->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
             //    << flattenedBVHNodes[i]->index << " "
             //    << flattenedBVHNodes[i]->depth << " " << std::endl;

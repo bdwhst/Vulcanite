@@ -28,6 +28,9 @@ layout(set = 0, binding = 2) uniform UBOMats {
 
 layout(set = 0, binding = 3) buffer ClusterIndices{
     uint culledClusterSize;
+    uint frustumCullingNum;
+    uint occulusionCullingNum;
+    uint errorCullingNum;
     uint culledClusterIndices[];
 } culledClusters;
 

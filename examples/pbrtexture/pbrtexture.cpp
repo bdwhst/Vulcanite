@@ -148,6 +148,11 @@ public:
 	int thresholdInt = 500;
 	double thresholdIntDiv = 1e6;
 
+	struct BVHTraversalPushConstants {
+		alignas(8) glm::vec2 screenSize;
+		alignas(4) float threshold;
+	} bvhTraversalPushConstants;
+
 	struct CullingPushConstants {
 		int numClusters;
 		float threshold;
@@ -280,47 +285,108 @@ public:
 
 			VK_CHECK_RESULT(vkBeginCommandBuffer(drawCmdBuffers[i], &cmdBufInfo));
 
-
 			/*
-			* BVH Traversal
+			* Naive BVH Traversal
 			*/
-			//vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, culledClusterIndicesBuffer.size, 0);
-			//VkBufferCopy copyRegion = {};
-			//copyRegion.size = scene.initNodeInfoIndices.size() * sizeof(uint32_t);
-			//copyRegion.srcOffset = 0;
-			//copyRegion.dstOffset = 0;
-			//vkCmdCopyBuffer(drawCmdBuffers[i], initNodeInfosBuffer.buffer, currNodeInfosBuffer.buffer, 1, &copyRegion);
-			//
-			//vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, bvhTraversalPipeline);
-			//std::cout << drawCmdBuffers.size() << std::endl;
-			//for (size_t j = 0; j < scene.depthCounts.size(); j++)
-			//{
-			//	//std::cout << "i: " << i << " j: " << j << std::endl;
-			//	vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, bvhTraversalPipelineLayout, 0, 1, &descManager->getSet("bvhTraversal", j & 1), 0, 0);
-			//	// TODO: Consider how to launch the compute shader
-			//	vkCmdDispatch(drawCmdBuffers[i], (scene.depthCounts[j] + 31) / 32, 1, 1);
-			//	VkBufferMemoryBarrier bufferBarrier = {};
-			//	bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			//	bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			//	bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			//	bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			//	bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			//	bufferBarrier.buffer = (j & 1) ? currNodeInfosBuffer.buffer : nextNodeInfosBuffer.buffer;
-			//	bufferBarrier.offset = 0;
-			//	bufferBarrier.size = VK_WHOLE_SIZE;
-			//	vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
-			//}
 
+			VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			imageMemBarrier.image = textures.hizbuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			
+			VkBufferCopy copyRegion = {};
+			copyRegion.size = scene.initNodeInfoIndices.size() * sizeof(uint32_t);
+			copyRegion.srcOffset = 0;
+			copyRegion.dstOffset = 0;
+			vkCmdCopyBuffer(drawCmdBuffers[i], initNodeInfosBuffer.buffer, currNodeInfosBuffer.buffer, 1, &copyRegion);
+			
 			VkBufferMemoryBarrier bufferBarrier = {};
-			//bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-			//bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			//bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			//bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			//bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			//bufferBarrier.buffer = culledClusterIndicesBuffer.buffer;
-			//bufferBarrier.offset = 0;
-			//bufferBarrier.size = VK_WHOLE_SIZE;
-			//vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = currNodeInfosBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			
+			vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, scene.clusterInfo.size() * sizeof(uint32_t), 0);
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = culledClusterIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			//vkDeviceWaitIdle(device);
+			for (size_t j = 0; j < scene.depthCounts.size(); j++)
+			{
+				// Refresh dst buffer
+				vkCmdFillBuffer(drawCmdBuffers[i], (j & 1) ? currNodeInfosBuffer.buffer : nextNodeInfosBuffer.buffer, 0, sizeof(uint32_t), 0);
+			
+				VkBufferMemoryBarrier bufferBarrier = {};
+				bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+				bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bufferBarrier.buffer = (j & 1) ? currNodeInfosBuffer.buffer : nextNodeInfosBuffer.buffer;
+				bufferBarrier.offset = 0;
+				bufferBarrier.size = VK_WHOLE_SIZE;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+				
+				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, bvhTraversalPipeline);
+				bvhTraversalPushConstants.threshold = thresholdInt / thresholdIntDiv;
+				bvhTraversalPushConstants.screenSize = glm::vec2(width, height);
+				vkCmdPushConstants(drawCmdBuffers[i], bvhTraversalPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(BVHTraversalPushConstants), &bvhTraversalPushConstants);
+				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, bvhTraversalPipelineLayout, 0, 1, &descManager->getSet("bvhTraversal", j & 1), 0, 0);
+				vkCmdDispatch(drawCmdBuffers[i], (scene.depthCounts[j] + 31) / 32, 1, 1);
+				
+				// Add barrier for next src buffer
+				// TODO: Consider how to launch the compute shader
+				bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+				bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+				bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bufferBarrier.buffer = (j & 1) ? currNodeInfosBuffer.buffer : nextNodeInfosBuffer.buffer;
+				bufferBarrier.offset = 0;
+				bufferBarrier.size = VK_WHOLE_SIZE;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			
+				// Add barrier for next dst buffer, prevent it from early refreshing
+				bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+				bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				bufferBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				bufferBarrier.buffer = (j & 1) ? nextNodeInfosBuffer.buffer: currNodeInfosBuffer.buffer;
+				bufferBarrier.offset = 0;
+				bufferBarrier.size = VK_WHOLE_SIZE;
+				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			
+			}
+			
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = culledClusterIndicesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -338,6 +404,8 @@ public:
 			errorPushConstants.screenSize = glm::vec2(width, height);
 			vkCmdPushConstants(drawCmdBuffers[i], errorProjPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ErrorPushConstants), &errorPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, errorProjPipelineLayout, 0, 1, &descManager->getSet("errorProj", 0), 0, 0);
+			//vkDeviceWaitIdle(device);
+
 			vkCmdDispatch(drawCmdBuffers[i], (errorPushConstants.numClusters + 31) / 32, 1, 1);
 
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
@@ -351,18 +419,18 @@ public:
 
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
-			VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
-			imageMemBarrier.image = textures.hizbuffer.image;
-			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			imageMemBarrier.subresourceRange.baseMipLevel = 0;
-			imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
-			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
-			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			//VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
+			//imageMemBarrier.image = textures.hizbuffer.image;
+			//imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			//imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			//imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			//imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			//imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			//imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			//imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
+			//imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			//imageMemBarrier.subresourceRange.layerCount = 1;
+			//vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
@@ -370,6 +438,8 @@ public:
 			cullingPushConstants.numClusters = clusterinfos.size();
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &descManager->getSet("culling", 0), 0, 0);
+			//vkDeviceWaitIdle(device);
+			//std::cout << "333" << std::endl;
 			vkCmdDispatch(drawCmdBuffers[i], (cullingPushConstants.numClusters + 31) / 32, 1, 1);
 
 			imageMemBarrier.image = textures.hizbuffer.image;
@@ -482,10 +552,14 @@ public:
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
 
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
-
+			
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &descManager->getSet("depthCopy", 0), 0, 0);
+			///vkDeviceWaitIdle(device);
+			///std::cout << "444" << std::endl;
+			///ASSERT(depthStencil.view != VK_NULL_HANDLE, "test");
 			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			//std::cout << "45" << std::endl;
 
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
 			imageMemBarriers[0].image = depthStencil.image;
@@ -540,6 +614,8 @@ public:
 			/*
 			*  HZB build
 			*/
+			//vkDeviceWaitIdle(device);
+			//std::cout << "555" << std::endl;
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
 			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
@@ -612,10 +688,10 @@ public:
 		//models.object.loadFromFile(getAssetPath() + "models/cerberus/cerberus.gltf", vulkanDevice, queue, glTFLoadingFlags);
 		//reducedModel.generateClusterInfos(models.object, vulkanDevice, queue);
 		
-		models.object.loadFromFile(getAssetPath() + "models/bunny.gltf", vulkanDevice, queue, glTFLoadingFlags);
-		naniteMesh.setModelPath((getAssetPath() + "models/bunny/").c_str());
+		models.object.loadFromFile(getAssetPath() + "models/dragon.gltf", vulkanDevice, queue, glTFLoadingFlags);
+		naniteMesh.setModelPath((getAssetPath() + "models/dragon/").c_str());
 		naniteMesh.loadvkglTFModel(models.object);
-		naniteMesh.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
+		naniteMesh.initNaniteInfo(getAssetPath() + "models/dragon.gltf", true);
 
 		for (int i = 0; i < naniteMesh.meshes.size(); i++)
 		{
@@ -626,24 +702,24 @@ public:
 		scene.naniteMeshes.push_back(naniteMesh);
 
 		// Uncomment this part for performance test scene
-		//modelMats.clear();
-		//for (int i = -3; i <= 3; i++)
-		//{
-		//	for (int j = -3; j <= 3; j++) 
-		//	{
-		//		auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.3f, j * 3));
-		//		auto& instance = Instance(&naniteMesh, modelMat);
-		//		modelMats.push_back(modelMat);
-		//		scene.naniteObjects.push_back(instance);
-		//	}
-		//}
+		modelMats.clear();
+		for (int i = -5; i <= 5; i++)
+		{
+			for (int j = -5; j <= 5; j++) 
+			{
+				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.3f, j * 3));
+				auto& instance = Instance(&naniteMesh, modelMat);
+				modelMats.push_back(modelMat);
+				scene.naniteObjects.push_back(instance);
+			}
+		}
 
 		// Uncomment this part for normal scene
-		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
-		auto & instance2 = Instance(&naniteMesh, modelMats[1]);
+		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		//auto & instance2 = Instance(&naniteMesh, modelMats[1]);
 		//auto & instance3 = Instance(&naniteMesh, modelMats[2]);
-		scene.naniteObjects.push_back(instance1);
-		scene.naniteObjects.push_back(instance2);
+		//scene.naniteObjects.push_back(instance1);
+		//scene.naniteObjects.push_back(instance2);
 		//scene.naniteObjects.push_back(instance3);
 
 		// Uncomment this part for normal multi-mesh scene
@@ -753,7 +829,9 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 1),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 2),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 3),
-			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4)
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 4),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
 		};
 		manager->addSetLayout("bvhTraversal", setLayoutBindings, 2);
 
@@ -881,15 +959,23 @@ public:
 		currNodeInfosBuffer.setupDescriptor();
 		nextNodeInfosBuffer.setupDescriptor();
 		culledClusterIndicesBuffer.setupDescriptor();
+		cullingUniformBuffer.setupDescriptor();
+		errorUniformBuffer.setupDescriptor();
 		manager->writeToSet("bvhTraversal", 0, 0, &bvhNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 1, &currNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 2, &nextNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 3, &culledClusterIndicesBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 4, &cullingUniformBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 5, &textures.hizbuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 6, &errorUniformBuffer.descriptor);
 		
 		manager->writeToSet("bvhTraversal", 1, 0, &bvhNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 1, &nextNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 2, &currNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 3, &culledClusterIndicesBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 4, &cullingUniformBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 5, &textures.hizbuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 6, &errorUniformBuffer.descriptor);
 
 		//Culling
 		clustersInfoBuffer.setupDescriptor();
@@ -1047,7 +1133,12 @@ public:
 		{
 			// BVH Traversal pipeline
 			VkPipelineShaderStageCreateInfo computeShaderStage = loadShader(getShadersPath() + "pbrtexture/bvhtraversal.comp.spv", VK_SHADER_STAGE_COMPUTE_BIT);
+			VkPushConstantRange push_constant2{};
+			push_constant2.size = sizeof(BVHTraversalPushConstants);
+			push_constant2.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 			pipelineLayoutCreateInfo = vks::initializers::pipelineLayoutCreateInfo(&descManager->getSetLayout("bvhTraversal"), 1);
+			pipelineLayoutCreateInfo.pPushConstantRanges = &push_constant2;
+			pipelineLayoutCreateInfo.pushConstantRangeCount = 1;
 			VK_CHECK_RESULT(vkCreatePipelineLayout(device, &pipelineLayoutCreateInfo, nullptr, &bvhTraversalPipelineLayout));
 
 			VkComputePipelineCreateInfo pipelineCreateInfo = {};
@@ -2134,27 +2225,37 @@ public:
 			vkFreeMemory(vulkanDevice->logicalDevice, initNodeInfosStaging.memory, nullptr);
 		}
 
-
+		std::cout << "scene.maxDepthCounts: " << scene.maxDepthCounts << std::endl;
+		std::cout << scene.maxDepthCounts * sizeof(uint32_t) << std::endl;
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.maxDepthCounts * sizeof(uint32_t),
+			scene.maxDepthCounts * 2 * sizeof(uint32_t),
+			//10000 * sizeof(uint32_t),
 			&currNodeInfosBuffer.buffer,
 			&currNodeInfosBuffer.memory,
 			nullptr));
 
+		//VkMemoryRequirements memoryRequirements;
+		//vkGetBufferMemoryRequirements(device, currNodeInfosBuffer.buffer, &memoryRequirements);
+		//std::cout << memoryRequirements.alignment << std::endl;
+		//std::cout << memoryRequirements.size << std::endl;
+
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
-			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.maxDepthCounts * sizeof(uint32_t),
+			scene.maxDepthCounts * 2 * sizeof(uint32_t),
+			//10000 * sizeof(uint32_t),
 			&nextNodeInfosBuffer.buffer,
 			&nextNodeInfosBuffer.memory,
 			nullptr));
 
+		std::cout << "scene.maxClusterNums: " << scene.maxClusterNums << std::endl;
+		std::cout << scene.maxClusterNums * sizeof(uint32_t) << std::endl;
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
-			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.maxClusterNums * sizeof(uint32_t),
+			scene.clusterInfo.size() * sizeof(uint32_t),
 			&culledClusterIndicesBuffer.buffer,
 			&culledClusterIndicesBuffer.memory,
 			nullptr));
@@ -2400,6 +2501,7 @@ public:
 			subresourceRange);
 
 		vulkanDevice->flushCommandBuffer(cmdBuf, queue);
+		vkDeviceWaitIdle(device);
 	}
 
 	void createModelMatsBuffer()

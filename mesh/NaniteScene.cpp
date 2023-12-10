@@ -193,17 +193,18 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
     }
     bvhNodeInfos.resize(flattenedNonVirtualNodes.size());
 
+    std::vector<uint32_t> depthLeafCounts;
     for (size_t i = 0; i < flattenedNonVirtualNodes.size(); i++)
     {
         auto& currNode = flattenedNonVirtualNodes[i];
 
         std::string indent(currNode->depth, '\t');
-        std::cout << indent 
-            << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") 
-            << currNode->depth << " " 
-            << currNode->index << " " 
-            << currNode->objectIdx << " "
-            << std::endl;
+        //std::cout << indent 
+        //    << (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF ? "Leaf " : "Non-leaf ") 
+        //    << currNode->depth << " " 
+        //    << currNode->index << " " 
+        //    << currNode->objectIdx << " "
+        //    << std::endl;
         
         //ASSERT(currNode->nodeStatus == VIRTUAL_NODE && currNode->depth >= 0, "A non-virtual node should now be cut out from the bvh tree");
         //ASSERT(currNode->nodeStatus != VIRTUAL_NODE && currNode->depth < 0, "A virtual node should not be cut out from the bvh tree");
@@ -211,8 +212,12 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         auto & nodeInfo = bvhNodeInfos[i];
         nodeInfo.pMinWorld = currNode->pMin;
         nodeInfo.pMaxWorld = currNode->pMax;
-        nodeInfo.errorWorld.x = currNode->parentNormalizedError;
-        nodeInfo.errorWorld.y = currNode->normalizedlodError;
+        nodeInfo.errorWorld.x = currNode->normalizedlodError;
+        nodeInfo.errorWorld.y = currNode->parentNormalizedError;
+        nodeInfo.errorRP = currNode->parentBoundingSphere;
+        //std::cout << indent << (currNode->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
+        //    << " pMin: " << nodeInfo.pMinWorld.x << " " << nodeInfo.pMinWorld.y << " " << nodeInfo.pMinWorld.z
+        //    << " pMax: " << nodeInfo.pMaxWorld.x << " " << nodeInfo.pMaxWorld.y << " " << nodeInfo.pMaxWorld.z << std::endl;
 
         ASSERT(currNode->children.size() <= 4, "Invalid node!");
         for (size_t j = 0; j < currNode->children.size(); ++j)
@@ -263,9 +268,16 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
                     isValid = false;
                 }
             }
+            if (currNode->depth >= depthLeafCounts.size()) {
+                depthLeafCounts.resize(currNode->depth + 1);
+                depthLeafCounts[currNode->depth] = validClusterIndicesSize;
+            }
+            else {
+                depthLeafCounts[currNode->depth] += validClusterIndicesSize;
+            }
             //std::cout << indent << "Curr leaf node clusterIndices size: " << validClusterIndicesSize << std::endl;
         }
-        std::cout << indent << "nodeInfo.clusterIndices[0]: " << nodeInfo.clusterIndices[0] << std::endl;
+        //std::cout << indent << "nodeInfo.clusterIndices[0]: " << nodeInfo.clusterIndices[0] << std::endl;
         //for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
         //{
         //    std::cout << indent << "clusterIndex: " << currNode->clusterIndices[i] << std::endl;
@@ -277,16 +289,35 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
     for (size_t i = 0; i < depthCounts.size(); i++)
     {
         std::cout << "i: " << i << " depthCounts[i]: " << depthCounts[i] << std::endl;
+        std::cout << "i: " << i << " depthLeafCounts[i]: " << depthLeafCounts[i] << std::endl;
     }
     std::cout << alignof(BVHNodeInfo) << std::endl;
     std::cout << sizeof(BVHNodeInfo) << std::endl;
     //ASSERT(0, "Stop here");
     maxDepthCounts = std::max_element(depthCounts.begin(), depthCounts.end())[0];
-    
+    std::cout << "maxDepthCounts: " << maxDepthCounts << std::endl;
+    std::cout << "maxClusterNums: " << maxClusterNums << std::endl;
     initNodeInfoIndices.resize(depthCounts[0] + 1); // Init node info indices by depth 0 node count
     initNodeInfoIndices[0] = depthCounts[0];
     for (size_t i = 1; i <= depthCounts[0]; i++)
     {
         initNodeInfoIndices[i] = i-1;
     }
+
+    //for (size_t i = 0; i < flattenedNonVirtualNodes.size(); i++)
+    //{
+    //    auto& currNode = flattenedNonVirtualNodes[i];
+    //    auto & nodeInfo = bvhNodeInfos[i];
+    //    if (currNode->depth == depthCounts.size() - 1) {
+    //        std::cout << "-----" << std::endl;
+    //        std::cout << currNode->index << std::endl;
+    //        std::cout << nodeInfo.childrenNodeIndices[0] << std::endl;
+    //        std::cout << nodeInfo.childrenNodeIndices[1] << std::endl;
+    //        std::cout << nodeInfo.childrenNodeIndices[2] << std::endl;
+    //        std::cout << nodeInfo.childrenNodeIndices[3] << std::endl;
+    //        std::cout << "-----" << std::endl;
+    //        ASSERT(glm::all(glm::lessThan(nodeInfo.childrenNodeIndices, glm::ivec4(0))), "A leaf node should have no children");
+    //        ASSERT(currNode->nodeStatus == LEAF, "A leaf node should have no children");
+    //    }
+    //}
 }

@@ -101,6 +101,8 @@ public:
 	std::shared_ptr<NaniteBVHNode> rootBVHNode;
 	void createBVH();
 	void buildBVH();
+	void updateBVHError();
+	void updateBVHErrorCore(std::shared_ptr<NaniteBVHNode> currNode, float& currNodeError, glm::vec4& currNodeBoundingSphere);
 	void traverseBVH();
 	void getClusterGroupAABB(ClusterGroup & clusterGroup);
 	void flattenBVH();

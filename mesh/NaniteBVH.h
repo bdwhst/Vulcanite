@@ -46,6 +46,7 @@ struct NaniteBVHNode
 	std::vector<std::shared_ptr<NaniteBVHNode>> children; // should be a fixed size
 	double normalizedlodError = -FLT_MAX;
 	double parentNormalizedError = -FLT_MAX;
+	glm::vec4 parentBoundingSphere;
 	int index = -1;
 	glm::vec3 pMin = glm::vec3(FLT_MAX);
 	glm::vec3 pMax = glm::vec3(-FLT_MAX);
@@ -71,6 +72,7 @@ struct NaniteBVHNodeInfo
 {
 	double normalizedlodError = -FLT_MAX;
 	double parentNormalizedError = -FLT_MAX;
+	glm::vec4 parentBoundingSphere;
 	int index = -1;
 	glm::vec3 pMin = glm::vec3(FLT_MAX);
 	glm::vec3 pMax = glm::vec3(-FLT_MAX);
@@ -85,6 +87,7 @@ struct NaniteBVHNodeInfo
 		return {
 			{"normalizedlodError", normalizedlodError},
 			{"parentNormalizedError", parentNormalizedError},
+			{"parentBoundingSphere", {parentBoundingSphere.x, parentBoundingSphere.y, parentBoundingSphere.z, parentBoundingSphere.w}},
 			{"index", index},
 			{"pMin", {pMin.x, pMin.y, pMin.z}},
 			{"pMax", {pMax.x, pMax.y, pMax.z}},
@@ -103,6 +106,15 @@ struct NaniteBVHNodeInfo
 
 		ASSERT(j.find("parentNormalizedError") != j.end(), "parentNormalizedError not found");
 		parentNormalizedError = j["parentNormalizedError"].get<double>();
+
+		ASSERT(j.find("parentBoundingSphere") != j.end() && j["parentBoundingSphere"].is_array() && j["parentBoundingSphere"].size() == 4,
+			"parentBoundingSphere not found or not properly set");
+		if (j.find("parentBoundingSphere") != j.end() && j["parentBoundingSphere"].is_array() && j["parentBoundingSphere"].size() == 4) {
+			parentBoundingSphere.x = j["parentBoundingSphere"][0].get<float>();
+			parentBoundingSphere.y = j["parentBoundingSphere"][1].get<float>();
+			parentBoundingSphere.z = j["parentBoundingSphere"][2].get<float>();
+			parentBoundingSphere.w = j["parentBoundingSphere"][3].get<float>();
+		}
 
 		ASSERT(j.find("index") != j.end(), "index not found");
 		index = j["index"].get<int>();

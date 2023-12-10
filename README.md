@@ -352,3 +352,35 @@ two subpasses
 
 
 ```
+
+12.8
+
+相当迷惑的两个问题
+都是关于Vulkan内存分配的问题
+
+---
+
+首先是内存对齐的问题
+```cpp
+
+
+```
+不知道为什么在shader侧的alignment似乎会变得很大。
+
+---
+
+然后是目前遇到的一个createBuffer的问题
+
+目前在调用以下代码创建buffer的时候：
+```cpp
+VK_CHECK_RESULT(vulkanDevice->createBuffer(
+	VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	scene.maxDepthCounts * sizeof(uint32_t),
+	&currNodeInfosBuffer.buffer,
+	&currNodeInfosBuffer.memory,
+	nullptr));
+```
+会神奇的创建出一个size只有一半的buffer，这个buffer的size计算没有错，在创建之后CPU端获取memory requirement的size也没有错，但是到nsight graphics里面就显示只有一般的大小，导致了一些奇怪的行为。
+
+

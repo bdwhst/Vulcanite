@@ -52,6 +52,14 @@ layout(std430, set = 0, binding = 7) buffer writeonly ObjectIdOut{
    uint outObjectIds[ ];
 };
 
+layout(set = 0, binding = 8) buffer ClusterIndices{
+    uint culledClusterSize;
+    uint frustumCullingNum;
+    uint occulusionCullingNum;
+    uint errorCullingNum;
+    uint culledClusterIndices[];
+} culledClusters;
+
 layout(push_constant) uniform PushConstants {
     int numClusters;
     float threshold;
@@ -203,9 +211,11 @@ shared uint group_start;
 
 void main()
 {
-    uint index = gl_GlobalInvocationID.x;
-    
-    if(index >= pcs.numClusters) return;
+    //uint index = gl_GlobalInvocationID.x;
+    //if(index >= pcs.numClusters) return;
+
+    if (gl_GlobalInvocationID.x >= culledClusters.culledClusterSize) return;
+    uint index = culledClusters.culledClusterIndices[gl_GlobalInvocationID.x];
 
     bool culled = false;
     Cluster currCluster = indata[index];

@@ -107,6 +107,13 @@ void Mesh::assignTriangleClusterGroup(Mesh& lastLOD)
         }
     }
 
+    for (auto & childClusters: lastLOD.clusters)
+    {
+        auto firstParent = childClusters.parentClusterIndices[0];
+        childClusters.parentBoundingSphereCenter = clusters[firstParent].boundingSphereCenter;
+        childClusters.parentBoundingSphereRadius= clusters[firstParent].boundingSphereRadius;
+    }
+
     for (auto & cluster:clusters)
     {
         cluster.lodLevel = lodLevel;
@@ -856,6 +863,7 @@ void Mesh::draw(VkCommandBuffer commandBuffer, uint32_t renderFlags, VkPipelineL
 void Mesh::createBVH()
 {
     buildBVH();
+    updateBVHError();
     //traverseBVH();
     //flattenBVH();
 }
@@ -922,7 +930,7 @@ void Mesh::buildBVH()
         std::string indent(currNode->depth, '\t');
         nodeStack.pop();
         if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF) { // Leaf node, store a cluster-group-sized clusters
-            std::cout << indent << "Leaf Node" << std::endl;
+            //std::cout << indent << "Leaf Node" << std::endl;
             auto& clusterGroup = clusterGroups[currNode->start];
             //currNode->clusterIndices = clusterGroup.clusterIndices;
             
@@ -949,7 +957,7 @@ void Mesh::buildBVH()
             }
         }
         else { // Non-leaf nodes
-            std::cout << indent << "Non-leaf Node" << std::endl;
+            //std::cout << indent << "Non-leaf Node" << std::endl;
             // Merge AABB
 			glm::vec3 pMin = glm::vec3(FLT_MAX);
 			glm::vec3 pMax = glm::vec3(-FLT_MAX);
@@ -961,16 +969,16 @@ void Mesh::buildBVH()
 			}
 			currNode->pMin = pMin;
 			currNode->pMax = pMax;
-            //std::cout << "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
-            //    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
+            //std::cout << indent << "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
+            //    "\n" << indent << "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
             //    std::endl;
-            std::cout << indent << "currNode->start: " << currNode->start << " currNode->end: " << currNode->end << std::endl;
+            //std::cout << indent << "currNode->start: " << currNode->start << " currNode->end: " << currNode->end << std::endl;
             if (currNode->end - currNode->start < 4) { // One level higher than leaf node, stop partitioning from now on
                 currNode->nodeStatus = NaniteBVHNodeStatus::NODE;
-                std::cout << indent << "stop partitioning" << std::endl;
+                //std::cout << indent << "stop partitioning" << std::endl;
                 for (int i = currNode->start; i < currNode->end; ++i)
                 {
-                    std::cout << indent << "leaf: " << i << std::endl;
+                    //std::cout << indent << "leaf: " << i << std::endl;
                     std::shared_ptr<NaniteBVHNode> leafNode(new NaniteBVHNode());
                     leafNode->nodeStatus = NaniteBVHNodeStatus::LEAF;
                     leafNode->start = i;
@@ -1057,6 +1065,66 @@ void Mesh::buildBVH()
 
 }
 
+void Mesh::updateBVHError()
+{
+    float currNodeError = -FLT_MAX;
+    glm::vec4 currNodeParentBoundingSphere = glm::vec4(0.0f);
+    updateBVHErrorCore(rootBVHNode, currNodeError, currNodeParentBoundingSphere);
+}
+
+void Mesh::updateBVHErrorCore(std::shared_ptr<NaniteBVHNode> currNode, float & currNodeError, glm::vec4 & currNodeParentBoundingSphere)
+{
+
+    if (currNode->nodeStatus == LEAF) {
+        //currNode->clusterIndices = clusterGroup.clusterIndices;
+
+        // Init clusterIndices
+        ASSERT(currNode->clusterIndices.size() <= CLUSTER_GROUP_MAX_SIZE, "too many clusterIndices");
+        glm::vec3 currNodeParentBoundingSphereCenter(0.0f);
+        float currNodeParentBoundingSphereRadius = 0.0f;
+        int validClusterNum = 0;
+        double maxError = -FLT_MAX;
+        for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
+        {
+            auto clusterIndex = currNode->clusterIndices[i];
+            if (clusterIndex >= 0) {
+                validClusterNum++;
+                currNodeParentBoundingSphereCenter += clusters[clusterIndex].parentBoundingSphereCenter;
+                currNodeParentBoundingSphereRadius = glm::max(currNodeParentBoundingSphereRadius, clusters[clusterIndex].parentBoundingSphereRadius);
+                maxError = std::max(maxError, clusters[clusterIndex].parentNormalizedError);
+            }
+        }
+        currNodeError = maxError;
+        currNodeParentBoundingSphereCenter /= validClusterNum;
+        currNodeParentBoundingSphere = glm::vec4(currNodeParentBoundingSphereCenter, currNodeParentBoundingSphereRadius);
+        currNode->parentNormalizedError = currNodeError;
+        currNode->parentBoundingSphere = currNodeParentBoundingSphere;
+    }
+    else {
+        glm::vec3 currNodeParentBoundingSphereCenter(0.0f);
+        float currNodeParentBoundingSphereRadius = 0.0f;
+        for (size_t i = 0; i < currNode->children.size(); i++)
+        {
+            auto & child = currNode->children[i];
+		    float childError = 0.0f;
+		    glm::vec4 childBoundingSphere = glm::vec4(0.0f);
+		    updateBVHErrorCore(child, childError, childBoundingSphere);
+		    currNodeError = std::max(currNodeError, childError);
+            
+            // TODO: CHECK this part
+            currNodeParentBoundingSphereRadius = glm::max(currNodeParentBoundingSphere[3], childBoundingSphere[3]);
+            currNodeParentBoundingSphereCenter += glm::vec3(childBoundingSphere);
+        }
+        currNodeParentBoundingSphereCenter /= currNode->children.size();
+        currNodeParentBoundingSphere = glm::vec4(currNodeParentBoundingSphereCenter, currNodeParentBoundingSphereRadius);
+        currNode->parentBoundingSphere = currNodeParentBoundingSphere;
+        currNode->parentNormalizedError = currNodeError;
+    }
+
+    std::string indent(currNode->depth, '\t');
+    std::cout << indent << "currNodeError: " << currNodeError << " boundingSphere: " << currNodeParentBoundingSphere.x << " " << currNodeParentBoundingSphere.y << " " << currNodeParentBoundingSphere.z << " " << currNodeParentBoundingSphere.w << std::endl;
+}
+
 void Mesh::traverseBVH()
 {
     // TODO: Update error
@@ -1128,99 +1196,3 @@ void Mesh::getClusterGroupAABB(ClusterGroup& clusterGroup)
         clusterGroups[clusterGroupIdx].mergeAABB(pMinWorld, pMaxWorld);
     }
 }
-
-//void Mesh::flattenBVH()
-//{
-//    std::vector<NaniteBVHNodeInfo> flattenedBVHNodes;
-//    std::queue<std::shared_ptr<NaniteBVHNode>> nodeQueue;
-//    uint32_t index = 0;
-//
-//    std::vector<uint32_t> levelCounts;
-//    uint32_t maxLevels = 0;
-//    nodeQueue.push(rootBVHNode);
-//    // Do a two-pass tree bfs
-//    //      First pass update flattened index
-//    //      Second pass update children index
-//    while (!nodeQueue.empty())
-//    {
-//        auto currNode = nodeQueue.front();
-//        currNode->index = index;
-//        //std::cout << currNode->level << " " << currNode->index << " " << levelCounts.size() << std::endl;
-//        ASSERT(currNode->level <= levelCounts.size(), "currNode->level should never be greater than size of levelCounts, check traversal implementation");
-//        if (currNode->level == levelCounts.size()) 
-//        {
-//            levelCounts.push_back(1);
-//        }
-//        else
-//        {
-//            levelCounts[currNode->level] += 1;
-//        }
-//        index++;
-//        nodeQueue.pop();
-//        if (currNode->nodeStatus = NaniteBVHNodeStatus::LEAF)
-//        {
-//            //std::cout << "Leaf node: " <<
-//            //    "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
-//            //    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
-//            //    std::endl;
-//        }
-//        else
-//        {
-//            //std::cout << "Non-leaf node: "
-//            //    "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
-//            //    "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
-//            //    std::endl;
-//            for (auto child : currNode->children)
-//            {
-//                nodeQueue.push(child);
-//            }
-//        }
-//    }
-//    flattenedBVHNodes.resize(index);  // `index` now is the size of nodes
-//    //for (size_t i = 0; i < levelCounts.size(); i++)
-//    //{
-//    //    std::cout << "i " << i << " levelCounts[i]: " << levelCounts[i] << std::endl;
-//    //}
-//    nodeQueue.push(rootBVHNode);
-//    while (!nodeQueue.empty()) 
-//    {
-//        
-//        auto currNode = nodeQueue.front();
-//        NaniteBVHNodeInfo nodeInfo;
-//        ASSERT(currNode->nodeStatus == VIRTUAL_NODE || currNode->children.size() <= 4, "size of non-virtual nodes' children should never be over 4");
-//        nodeInfo.children.resize(currNode->children.size());
-//        for (int i = 0; i < currNode->children.size(); ++i)
-//        {
-//            nodeInfo.children[i] = currNode->children[i]->index;
-//        }
-//        nodeInfo.pMax = currNode->pMax;
-//        nodeInfo.pMin = currNode->pMin;
-//        nodeInfo.parentNormalizedError = currNode->parentNormalizedError;
-//        nodeInfo.normalizedlodError = currNode->normalizedlodError;
-//        nodeInfo.nodeStatus = currNode->nodeStatus;
-//        nodeInfo.level = currNode->level;
-//        ASSERT(flattenedBVHNodes[currNode->index].children[0] == -1, "Repeated index!");
-//        ASSERT(currNode->index < flattenedBVHNodes.size(), "index over flattenedBVHNodes.size()");
-//        flattenedBVHNodes[currNode->index] = nodeInfo;
-//        nodeQueue.pop();
-//        if (currNode->nodeStatus == NaniteBVHNodeStatus::LEAF)
-//        {
-//            std::cout << "Leaf node: " <<
-//                "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
-//                "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
-//                std::endl;
-//        }
-//        else
-//        {
-//            std::cout << "Non-leaf node: "
-//                "pMin: " << currNode->pMin.x << " " << currNode->pMin.y << " " << currNode->pMin.z <<
-//                "pMax: " << currNode->pMax.x << " " << currNode->pMax.y << " " << currNode->pMax.z <<
-//                std::endl;
-//            for (auto child : currNode->children)
-//            {
-//                nodeQueue.push(child);
-//            }
-//        }
-//    }
-//
-//}

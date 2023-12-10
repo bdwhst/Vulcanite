@@ -930,10 +930,10 @@ public:
 		scene.naniteMeshes.emplace_back(naniteMesh);
 
 		// Uncomment this part for performance test scene
-		/*modelMats.clear();
-		for (int i = -6; i <= 6; i++)
+		modelMats.clear();
+		for (int i = -3; i <= 3; i++)
 		{
-			for (int j = -6; j <= 6; j++) 
+			for (int j = -3; j <= 3; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
@@ -941,7 +941,7 @@ public:
 				scene.naniteObjects.emplace_back(instance);
 		
 			}
-		}*/
+		}
 
 		// Uncomment this part for normal scene
 		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
@@ -952,7 +952,7 @@ public:
 		//scene.naniteObjects.push_back(instance3);
 
 		// Uncomment this part for normal multi-mesh scene
-		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		/*auto & instance1 = Instance(&naniteMesh, modelMats[0]);
 		scene.naniteObjects.push_back(instance1);
 		NaniteMesh naniteMesh2;
 		naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
@@ -966,7 +966,7 @@ public:
 		}
 		scene.naniteMeshes.push_back(naniteMesh2);
 		auto& instance2 = Instance(&naniteMesh2, modelMats[1]);
-		scene.naniteObjects.push_back(instance2);
+		scene.naniteObjects.push_back(instance2);*/
 
 		// Uncomment this part for performance test multi-mesh scene
 		//NaniteMesh naniteMesh2;

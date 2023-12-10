@@ -1071,15 +1071,14 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -17; i <= 17; i++)
+		for (int i = -10; i <= 10; i++)
 		{
-			for (int j = -17; j <= 17; j++) 
+			for (int j = -10; j <= 10; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
 				modelMats.emplace_back(modelMat);
 				scene.naniteObjects.emplace_back(instance);
-		
 			}
 		}
 
@@ -3916,6 +3915,18 @@ public:
 	virtual void OnUpdateUIOverlay(vks::UIOverlay *overlay)
 	{
 		bool rebuildCB = false;
+		std::string s1 = "Num triangles without vulkanite:" + std::to_string(scene.sceneIndicesCount / 3);
+		overlay->text(s1.c_str());
+
+		memcpy(&hwrDrawIndexedIndirect, hwrDrawIndexedIndirectBuffer.mapped, sizeof(DrawIndexedIndirect));
+		uint32_t swrVertSize;
+		memcpy(&swrVertSize, swrNumVerticesBuffer.mapped, sizeof(uint32_t));
+		std::string s2 = "Num triangles hw raserized:" + std::to_string(hwrDrawIndexedIndirect.indexCount / 3);
+		overlay->text(s2.c_str());
+		std::string s3 = "Num triangles sw raserized:" + std::to_string(swrVertSize / 3);
+		overlay->text(s3.c_str());
+		std::string s4 = "Num triangles raserized in total:" + std::to_string((swrVertSize + hwrDrawIndexedIndirect.indexCount) / 3);
+		overlay->text(s4.c_str());
 		if (overlay->header("Settings")) {
 			if (overlay->inputFloat("Exposure", &uboParams.exposure, 0.1f, 2)) {
 				updateParams();

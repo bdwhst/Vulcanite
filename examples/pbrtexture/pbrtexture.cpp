@@ -167,6 +167,7 @@ public:
 	vks::Buffer initNodeInfosBuffer;
 	vks::Buffer currNodeInfosBuffer;
 	vks::Buffer nextNodeInfosBuffer;
+	vks::Buffer sortedClusterIndicesBuffer; // Cluster indices sorted by BVH
 	vks::Buffer culledClusterIndicesBuffer; // Cluster indices after BVH culling
 	vks::Buffer culledClusterObjectIndicesBuffer;
 
@@ -715,9 +716,9 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -7; i <= 7; i++)
+		for (int i = -17; i <= 17; i++)
 		{
-			for (int j = -7; j <= 7; j++) 
+			for (int j = -17; j <= 17; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.3f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
@@ -845,6 +846,7 @@ public:
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT, 5),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 6),
 			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 7),
+			vks::initializers::descriptorSetLayoutBinding(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT, 8),
 		};
 		manager->addSetLayout("bvhTraversal", setLayoutBindings, 2);
 
@@ -979,6 +981,7 @@ public:
 		cullingUniformBuffer.setupDescriptor();
 		errorUniformBuffer.setupDescriptor();
 		culledClusterObjectIndicesBuffer.setupDescriptor();
+		sortedClusterIndicesBuffer.setupDescriptor();
 		manager->writeToSet("bvhTraversal", 0, 0, &bvhNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 1, &currNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 2, &nextNodeInfosBuffer.descriptor);
@@ -987,6 +990,7 @@ public:
 		manager->writeToSet("bvhTraversal", 0, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 6, &errorUniformBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 0, 7, &culledClusterObjectIndicesBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 0, 8, &sortedClusterIndicesBuffer.descriptor);
 		
 		manager->writeToSet("bvhTraversal", 1, 0, &bvhNodeInfosBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 1, &nextNodeInfosBuffer.descriptor);
@@ -996,6 +1000,7 @@ public:
 		manager->writeToSet("bvhTraversal", 1, 5, &textures.hizbuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 6, &errorUniformBuffer.descriptor);
 		manager->writeToSet("bvhTraversal", 1, 7, &culledClusterObjectIndicesBuffer.descriptor);
+		manager->writeToSet("bvhTraversal", 1, 8, &sortedClusterIndicesBuffer.descriptor);
 
 		//Culling
 		clustersInfoBuffer.setupDescriptor();
@@ -2264,6 +2269,39 @@ public:
 			&currNodeInfosBuffer.memory,
 			nullptr));
 
+		{
+
+			vks::Buffer sortedClusterIndicesStaging;
+			//std::cout << "size of clusterInfo:" << sizeof(ClusterInfo) << std::endl;
+
+			VK_CHECK_RESULT(vulkanDevice->createBuffer(
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+				scene.sortedClusterIndices.size() * sizeof(uint32_t),
+				&sortedClusterIndicesStaging.buffer,
+				&sortedClusterIndicesStaging.memory,
+				scene.sortedClusterIndices.data()));
+
+			VK_CHECK_RESULT(vulkanDevice->createBuffer(
+				VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				scene.sortedClusterIndices.size() * sizeof(uint32_t),
+				&sortedClusterIndicesBuffer.buffer,
+				&sortedClusterIndicesBuffer.memory,
+				nullptr));
+			VkCommandBuffer copyCmd = vulkanDevice->createCommandBuffer(VK_COMMAND_BUFFER_LEVEL_PRIMARY, true);
+
+			VkBufferCopy copyRegion = {};
+
+			copyRegion.size = scene.sortedClusterIndices.size() * sizeof(uint32_t);
+			vkCmdCopyBuffer(copyCmd, sortedClusterIndicesStaging.buffer, sortedClusterIndicesBuffer.buffer, 1, &copyRegion);
+
+			vulkanDevice->flushCommandBuffer(copyCmd, queue, true);//TODO: get transfer queue here
+
+			vkDestroyBuffer(vulkanDevice->logicalDevice, sortedClusterIndicesStaging.buffer, nullptr);
+			vkFreeMemory(vulkanDevice->logicalDevice, sortedClusterIndicesStaging.memory, nullptr);
+		}
+
 		//VkMemoryRequirements memoryRequirements;
 		//vkGetBufferMemoryRequirements(device, currNodeInfosBuffer.buffer, &memoryRequirements);
 		//std::cout << memoryRequirements.alignment << std::endl;
@@ -2281,7 +2319,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.maxClusterNum * sizeof(uint32_t),
+			(scene.maxClusterNum + 5) * sizeof(uint32_t), // reserve 5 for atomic counter
 			&culledClusterIndicesBuffer.buffer,
 			&culledClusterIndicesBuffer.memory,
 			nullptr));
@@ -2302,7 +2340,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, 
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount / 2 * sizeof(uint32_t),
+			scene.sceneIndicesCount / 8 * sizeof(uint32_t),
 			//scene.sceneIndicesCount * sizeof(uint32_t),
 			//width * height * CLUSTER_MAX_SIZE * 3 * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
 			&culledIndicesBuffer.buffer,
@@ -2312,7 +2350,7 @@ public:
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scene.sceneIndicesCount / 2 * sizeof(uint16_t),
+			scene.sceneIndicesCount / 8 * sizeof(uint16_t),
 			//scene.sceneIndicesCount * sizeof(uint16_t),
 			//width * height * CLUSTER_MAX_SIZE * sizeof(uint32_t), // TODO: Should consider using a buffer relative with screen size
 			&culledObjectIndicesBuffer.buffer,

@@ -79,6 +79,8 @@ struct NaniteBVHNodeInfo
 	std::vector<int> children;
 	//glm::ivec4 children = glm::ivec4(-1);
 	std::array<int, CLUSTER_GROUP_MAX_SIZE> clusterIndices; // should try to assert index overflow
+	int start = -1;
+	int end = -1;
 	NaniteBVHNodeStatus nodeStatus = NaniteBVHNodeStatus::INVALID;
 	uint32_t depth = 0;
 	int lodLevel = -1;
@@ -93,6 +95,8 @@ struct NaniteBVHNodeInfo
 			{"pMax", {pMax.x, pMax.y, pMax.z}},
 			{"children", children},
 			{"clusterIndices", clusterIndices},
+			{"start", start},
+			{"end", end},
 			{"nodeStatus", nodeStatus},
 			{"depth", depth},
 			{"lodLevel", lodLevel}
@@ -140,6 +144,12 @@ struct NaniteBVHNodeInfo
 		for (int i = 0; i < j["children"].size(); ++i) {
 			children[i] = j["children"].at(i).get<uint32_t>();
 		}
+
+		ASSERT(j.find("start") != j.end(), "start not found");
+		start = j["start"].get<int>();
+
+		ASSERT(j.find("end") != j.end(), "end not found");
+		end = j["end"].get<int>();
 
 		ASSERT(j.find("clusterIndices") != j.end() && j["clusterIndices"].is_array(), "clusterIndices not found");
 		for (int i = 0; i < CLUSTER_GROUP_MAX_SIZE; ++i) {

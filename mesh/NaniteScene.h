@@ -25,6 +25,8 @@ public:
 	std::vector<uint32_t> clusterIndexCounts;
 	uint32_t maxClusterNum = 0;
 
+	std::vector<uint32_t> sortedClusterIndices;
+
 	uint32_t maxLodLevelNum = -1;
 
 	uint32_t sceneIndicesCount = 0;
@@ -45,5 +47,5 @@ public:
 	void createVertexIndexBuffer(vks::VulkanDevice* device, VkQueue transferQueue);
 	void createClusterInfos(vks::VulkanDevice* device, VkQueue transferQueue);
 	void createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transferQueue);
-	//void buildClusterInfo();
+	void buildClusterInfo();
 };

@@ -7,6 +7,8 @@ layout(local_size_x = WORKGROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 #define CLUSTER_GROUP_MAX_SIZE 32
 
 struct BVHNodeInfo{
+    uint start;
+    uint end;
     vec3 pMin;
     vec3 pMax;
     uint objectId;
@@ -14,15 +16,6 @@ struct BVHNodeInfo{
     vec4 errorRP;
     vec2 errorWorld;
     ivec4 childrenNodeIndices;
-    //int clusterIndices[CLUSTER_GROUP_MAX_SIZE]; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices0; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices1; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices2; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices3; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices4; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices5; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices6; // if clusterIndices[0] == -1, then this node is not a leaf node
-    ivec4 clusterIndices7; // if clusterIndices[0] == -1, then this node is not a leaf node
 };
 
 struct BVHNodeInfoPass{
@@ -70,6 +63,10 @@ layout(binding = 6) uniform UBOMats2 {
 
 layout(binding = 7) buffer clusterObjectIndexBuffer{
     uint clusterObjectIndices[];
+};
+
+layout(binding = 8) buffer SortedClusterIndicesBuffer{
+    uint sortedClusterIndices[];
 };
 
 layout(push_constant) uniform PushConstants {
@@ -267,89 +264,16 @@ bool errorCulling(BVHNodeInfo b)
     //return false;
 }
 
-void addClusterIndex(BVHNodeInfo nodeInfo)
+void addClusterIndex1(BVHNodeInfo nodeInfo)
 {
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices0[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices0[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices1[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices1[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices2[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices2[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices3[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices3[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices4[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices4[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices5[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices5[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices6[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices6[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
-    for(int i =0; i < 4; ++i){
-        if (nodeInfo.clusterIndices7[i] == -1){
-            return;
-        }
-        else{
-            uint index = atomicAdd(clusterSize, 1);
-            clusters[index] = nodeInfo.clusterIndices7[i];
-            clusterObjectIndices[index] = nodeInfo.objectId;
-        }
-    }
+    uint leafClusterSize = nodeInfo.end - nodeInfo.start;
+    uint clusterStartIndex = atomicAdd(clusterSize, leafClusterSize);
+    for(int i = 0; i < leafClusterSize; i++){
+		clusters[clusterStartIndex + i] = sortedClusterIndices[nodeInfo.start + i];
+        clusterObjectIndices[clusterStartIndex + i] = nodeInfo.objectId;
+	}
 }
+
 
 void main(){
 	if(gl_GlobalInvocationID.x >= currBvhNodeInfoSize) return;
@@ -375,10 +299,15 @@ void main(){
     // output to nextBVHNodeInfoIndices
 
     // output to clusterIndexBuffer
-    bool isLeaf = (nodeInfo.clusterIndices0[0] != -1);
+    uint leafClusterSize = nodeInfo.end - nodeInfo.start;
+    bool isLeaf = (leafClusterSize != 0);
     if (isLeaf){
         // TODO: Optimization
-        addClusterIndex(nodeInfo);
+        uint clusterStartIndex = atomicAdd(clusterSize, leafClusterSize);
+        for(int i = 0; i < leafClusterSize; i++){
+		    clusters[clusterStartIndex + i] = sortedClusterIndices[nodeInfo.start + i];
+            clusterObjectIndices[clusterStartIndex + i] = nodeInfo.objectId;
+	    }
 	}
     else
     {

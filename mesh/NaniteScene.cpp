@@ -112,11 +112,11 @@ void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transfer
     {
         auto& naniteMesh = naniteMeshes[i];
         auto& instance = Instance(&naniteMesh, glm::mat4(1.0f));
-        instance.buildClusterInfo();
+        naniteMesh.buildClusterInfo();
 		clusterIndexOffsets[i] = clusterInfo.size();
-		clusterInfo.insert(clusterInfo.end(), instance.clusterInfo.begin(), instance.clusterInfo.end());
+		clusterInfo.insert(clusterInfo.end(), naniteMesh.clusterInfo.begin(), naniteMesh.clusterInfo.end());
         clusterIndexCounts[i] = clusterInfo.size();
-        errorInfo.insert(errorInfo.end(), instance.errorInfo.begin(), instance.errorInfo.end());
+        errorInfo.insert(errorInfo.end(), naniteMesh.errorInfo.begin(), naniteMesh.errorInfo.end());
     }
     ASSERT(clusterInfo.size() == errorInfo.size(), "clusterInfo.size() should be equal to errorInfo.size()");
     //for (size_t i = 0; i < clusterInfo.size(); i++)
@@ -157,7 +157,13 @@ void NaniteScene::createClusterInfos(vks::VulkanDevice* device, VkQueue transfer
 
 void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transferQueue)
 {
-
+    // TODO: Modify this part for multi-mesh!
+    for (size_t i = 0; i < naniteMeshes.size(); i++)
+    {
+        auto & naniteMesh = naniteMeshes[i];
+        sortedClusterIndices.insert(sortedClusterIndices.end(), naniteMesh.sortedClusterIndices.begin(), naniteMesh.sortedClusterIndices.end());
+    }
+    std::cout << "sortedClusterIndices.size(): " << sortedClusterIndices.size() << std::endl;
     virtualRootNode = std::make_shared<NaniteBVHNode>();
     virtualRootNode->nodeStatus = VIRTUAL_NODE;
     //virtualRootNode->depth = 0;
@@ -240,6 +246,7 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         nodeInfo.errorWorld.x = currNode->normalizedlodError;
         nodeInfo.errorWorld.y = currNode->parentNormalizedError;
         nodeInfo.errorRP = currNode->parentBoundingSphere;
+        nodeInfo.clusterIntervals = glm::ivec2(currNode->start, currNode->end);
         //std::cout << indent << (currNode->nodeStatus == VIRTUAL_NODE ? "Virtual " : "Non-virtual ")
         //    << " pMin: " << nodeInfo.pMinWorld.x << " " << nodeInfo.pMinWorld.y << " " << nodeInfo.pMinWorld.z
         //    << " pMax: " << nodeInfo.pMaxWorld.x << " " << nodeInfo.pMaxWorld.y << " " << nodeInfo.pMaxWorld.z << std::endl;
@@ -253,14 +260,15 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
 
         //nodeInfo.clusterIndices = currNode->clusterIndices;
         // TODO: Use memcpy
-        for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
-        {
-            if (currNode->clusterIndices[i] >= 0) {
-                //nodeInfo.clusterIndices[i] = currNode->clusterIndices[i] + clusterIndexOffsets[currNode->objectIdx];
-                nodeInfo.clusterIndices[i] = currNode->clusterIndices[i];
-            }
-        }
-        ASSERT(currNode->nodeStatus == LEAF || nodeInfo.clusterIndices[0] == -1, "A non-leaf node should have no cluster index");
+        //for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
+        //{
+        //    if (currNode->clusterIndices[i] >= 0) {
+        //        //nodeInfo.clusterIndices[i] = currNode->clusterIndices[i] + clusterIndexOffsets[currNode->objectIdx];
+        //        // TODO: Modify this part for multi-mesh!
+        //        nodeInfo.clusterIndices[i] = currNode->clusterIndices[i];
+        //    }
+        //}
+        //ASSERT(currNode->nodeStatus == LEAF || nodeInfo.clusterIndices[0] == -1, "A non-leaf node should have no cluster index");
         //std::cout << indent << "object: " << currNode->objectIdx
         //    << " lod: " << currNode->lodLevel
         //    << " depth: " << currNode->depth << std::endl;
@@ -283,12 +291,12 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
             {
                 if (currNode->clusterIndices[i] >= 0) {
                     ASSERT(isValid, "Invalid cluster indices"); // This assertion is to make sure that all cluster indices are allocated contiguously
-					validClusterIndicesSize += 1;
+					validClusterIndicesSize += nodeInfo.clusterIntervals[1] - nodeInfo.clusterIntervals[0];
 					//std::cout << indent
                     //    << " cluster: " << nodeInfo.clusterIndices[i]
                     //    << std::endl;
                     //ASSERT(clusterIndexSets.find(nodeInfo.clusterIndices[i]) != clusterIndexSets.end(), "Already removed, repeat index!");
-                    clusterIndexSets.erase(nodeInfo.clusterIndices[i]);
+                    //clusterIndexSets.erase(nodeInfo.clusterIndices[i]);
 				}
                 else {
                     isValid = false;
@@ -311,7 +319,7 @@ void NaniteScene::createBVHNodeInfos(vks::VulkanDevice* device, VkQueue transfer
         //}
     }
 
-    ASSERT(clusterIndexSets.size() == 0, "Some clusters are not covered");
+    //ASSERT(clusterIndexSets.size() == 0, "Some clusters are not covered");
     for (size_t i = 0; i < depthCounts.size(); i++)
     {
         std::cout << "i: " << i << " depthCounts[i]: " << depthCounts[i] << std::endl;

@@ -321,7 +321,7 @@ public:
 			bufferBarrier.size = VK_WHOLE_SIZE;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 			
-			vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, sizeof(uint32_t), 0);
+			vkCmdFillBuffer(drawCmdBuffers[i], culledClusterIndicesBuffer.buffer, 0, 5 * sizeof(uint32_t), 0); // save the first 5 uint32_t for atomic counters
 			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;

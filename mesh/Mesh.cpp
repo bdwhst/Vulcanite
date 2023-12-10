@@ -1070,6 +1070,7 @@ void Mesh::updateBVHError()
     float currNodeError = -FLT_MAX;
     glm::vec4 currNodeParentBoundingSphere = glm::vec4(0.0f);
     updateBVHErrorCore(rootBVHNode, currNodeError, currNodeParentBoundingSphere);
+    //ASSERT(0, "Stop");
 }
 
 void Mesh::updateBVHErrorCore(std::shared_ptr<NaniteBVHNode> currNode, float & currNodeError, glm::vec4 & currNodeParentBoundingSphere)
@@ -1084,18 +1085,51 @@ void Mesh::updateBVHErrorCore(std::shared_ptr<NaniteBVHNode> currNode, float & c
         float currNodeParentBoundingSphereRadius = 0.0f;
         int validClusterNum = 0;
         double maxError = -FLT_MAX;
+        std::vector<glm::vec3> childNodeParentBoundingSphereCenters;
+        std::vector<float> childNodeParentBoundingSphereRadius;
         for (size_t i = 0; i < CLUSTER_GROUP_MAX_SIZE; i++)
         {
             auto clusterIndex = currNode->clusterIndices[i];
             if (clusterIndex >= 0) {
                 validClusterNum++;
                 currNodeParentBoundingSphereCenter += clusters[clusterIndex].parentBoundingSphereCenter;
+                childNodeParentBoundingSphereCenters.push_back(clusters[clusterIndex].parentBoundingSphereCenter);
                 currNodeParentBoundingSphereRadius = glm::max(currNodeParentBoundingSphereRadius, clusters[clusterIndex].parentBoundingSphereRadius);
+                childNodeParentBoundingSphereRadius.push_back(clusters[clusterIndex].parentBoundingSphereRadius);
                 maxError = std::max(maxError, clusters[clusterIndex].parentNormalizedError);
             }
         }
+        //currNodeParentBoundingSphereCenter /= validClusterNum;
+        float largestDiameter= -FLT_MAX;
+        glm::vec4 sphere1(0), sphere2(0);
+        for (size_t i = 0; i < childNodeParentBoundingSphereCenters.size(); i++)
+        {
+            //std::cout << childNodeParentBoundingSphereCenters[i].x << " " << childNodeParentBoundingSphereCenters[i].y << " " << childNodeParentBoundingSphereCenters[i].z << std::endl;
+            for (size_t j = 0; j < childNodeParentBoundingSphereCenters.size(); j++)
+            {
+                auto distance = glm::distance(childNodeParentBoundingSphereCenters[i], childNodeParentBoundingSphereCenters[j]);
+                auto diameter = distance + childNodeParentBoundingSphereRadius[i] + childNodeParentBoundingSphereRadius[j];
+                if (diameter > largestDiameter)
+                {
+                    sphere1 = glm::vec4(childNodeParentBoundingSphereCenters[i], childNodeParentBoundingSphereRadius[i]);
+                    sphere2 = glm::vec4(childNodeParentBoundingSphereCenters[j], childNodeParentBoundingSphereRadius[j]);
+                    largestDiameter = diameter;
+                }
+
+            }
+        }
+        if (glm::distance(glm::vec3(sphere1), glm::vec3(sphere2)) < FLT_EPSILON){ // Two spheres have the same center
+            currNodeParentBoundingSphereCenter = glm::vec3(sphere1);
+			currNodeParentBoundingSphereRadius = glm::max(sphere1.w, sphere2.w);
+        }
+        else {
+            auto sphere1ToSphere2 = glm::normalize(glm::vec3(sphere2) - glm::vec3(sphere1));
+            currNodeParentBoundingSphereCenter = 
+                (glm::vec3(sphere1) + sphere1.w * sphere1ToSphere2 + glm::vec3(sphere2) + sphere2.w * -sphere1ToSphere2) * 0.5f;
+            currNodeParentBoundingSphereRadius = largestDiameter * 0.5f;
+        }
         currNodeError = maxError;
-        currNodeParentBoundingSphereCenter /= validClusterNum;
+        
         currNodeParentBoundingSphere = glm::vec4(currNodeParentBoundingSphereCenter, currNodeParentBoundingSphereRadius);
         currNode->parentNormalizedError = currNodeError;
         currNode->parentBoundingSphere = currNodeParentBoundingSphere;
@@ -1103,19 +1137,50 @@ void Mesh::updateBVHErrorCore(std::shared_ptr<NaniteBVHNode> currNode, float & c
     else {
         glm::vec3 currNodeParentBoundingSphereCenter(0.0f);
         float currNodeParentBoundingSphereRadius = 0.0f;
+        std::vector<glm::vec3> childNodeParentBoundingSphereCenters;
+        std::vector<float> childNodeParentBoundingSphereRadius;
         for (size_t i = 0; i < currNode->children.size(); i++)
         {
-            auto & child = currNode->children[i];
-		    float childError = 0.0f;
-		    glm::vec4 childBoundingSphere = glm::vec4(0.0f);
-		    updateBVHErrorCore(child, childError, childBoundingSphere);
-		    currNodeError = std::max(currNodeError, childError);
-            
-            // TODO: CHECK this part
-            currNodeParentBoundingSphereRadius = glm::max(currNodeParentBoundingSphere[3], childBoundingSphere[3]);
-            currNodeParentBoundingSphereCenter += glm::vec3(childBoundingSphere);
+            auto& child = currNode->children[i];
+            float childError = 0.0f;
+            glm::vec4 childBoundingSphere = glm::vec4(0.0f);
+            updateBVHErrorCore(child, childError, childBoundingSphere);
+            currNodeError = std::max(currNodeError, childError);
+            childNodeParentBoundingSphereCenters.push_back(glm::vec3(childBoundingSphere));
+            childNodeParentBoundingSphereRadius.push_back(childBoundingSphere.w);
+            //// TODO: CHECK this part
+            //currNodeParentBoundingSphereRadius = glm::max(currNodeParentBoundingSphere[3], childBoundingSphere[3]);
+            //currNodeParentBoundingSphereCenter += glm::vec3(childBoundingSphere);
         }
-        currNodeParentBoundingSphereCenter /= currNode->children.size();
+        //currNodeParentBoundingSphereCenter /= currNode->children.size();
+        float largestDiameter = -FLT_MAX;
+        glm::vec4 sphere1(0), sphere2(0);
+        for (size_t i = 0; i < childNodeParentBoundingSphereCenters.size(); i++)
+        {
+            //std::cout << childNodeParentBoundingSphereCenters[i].x << " " << childNodeParentBoundingSphereCenters[i].y << " " << childNodeParentBoundingSphereCenters[i].z << std::endl;
+            for (size_t j = 0; j < childNodeParentBoundingSphereCenters.size(); j++)
+            {
+                auto distance = glm::distance(childNodeParentBoundingSphereCenters[i], childNodeParentBoundingSphereCenters[j]);
+                auto diameter = distance + childNodeParentBoundingSphereRadius[i] + childNodeParentBoundingSphereRadius[j];
+                if (diameter > largestDiameter)
+                {
+                    sphere1 = glm::vec4(childNodeParentBoundingSphereCenters[i], childNodeParentBoundingSphereRadius[i]);
+                    sphere2 = glm::vec4(childNodeParentBoundingSphereCenters[j], childNodeParentBoundingSphereRadius[j]);
+                    largestDiameter = diameter;
+                }
+
+            }
+        }
+        if (glm::distance(glm::vec3(sphere1), glm::vec3(sphere2)) < FLT_EPSILON) { // Two spheres have the same center
+            currNodeParentBoundingSphereCenter = glm::vec3(sphere1);
+            currNodeParentBoundingSphereRadius = glm::max(sphere1.w, sphere2.w);
+        }
+        else {
+            auto sphere1ToSphere2 = glm::normalize(glm::vec3(sphere2) - glm::vec3(sphere1));
+            currNodeParentBoundingSphereCenter =
+                (glm::vec3(sphere1) + sphere1.w * sphere1ToSphere2 + glm::vec3(sphere2) + sphere2.w * -sphere1ToSphere2) * 0.5f;
+            currNodeParentBoundingSphereRadius = largestDiameter * 0.5f;
+        }
         currNodeParentBoundingSphere = glm::vec4(currNodeParentBoundingSphereCenter, currNodeParentBoundingSphereRadius);
         currNode->parentBoundingSphere = currNodeParentBoundingSphere;
         currNode->parentNormalizedError = currNodeError;

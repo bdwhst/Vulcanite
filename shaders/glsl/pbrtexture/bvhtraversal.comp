@@ -257,6 +257,8 @@ bool errorCulling(BVHNodeInfo b)
     //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p6,R));
     //err = max(err, b.errorWorld.y * getScreenBoundRadiusSq(p7,R));
 	//return err <= pcs.threshold;
+    float err = b.errorWorld.y * getScreenBoundRadiusSq(b.errorRP.xyz, b.errorRP.w);
+    return err <= pcs.threshold;
     center = 0.5 * (b.pMin + b.pMax);
 	//R = max(max(b.pMax.x - b.pMin.x, b.pMax.y - b.pMin.y), b.pMax.z - b.pMin.z);
 	R = b.errorRP.w;
@@ -278,25 +280,19 @@ void addClusterIndex1(BVHNodeInfo nodeInfo)
 void main(){
 	if(gl_GlobalInvocationID.x >= currBvhNodeInfoSize) return;
 	BVHNodeInfo nodeInfo = bvhNodeInfos[currBVHNodeInfoIndices[gl_GlobalInvocationID.x]];
-    bool culled = false;
     // frustum culling & occlusion culling
-    //culled = culled || frustrumCulling(nodeInfo);
-    if (frustrumCulling(nodeInfo)) return;
-    //if (frustrumCulling(nodeInfo)){
-	//	atomicAdd(frustumCullingNum, 1);
-	//}
-    //culled = culled || occlusionCulling(nodeInfo);
-    if (occlusionCulling(nodeInfo)) return;
-    //if (occlusionCulling(nodeInfo)){
-    //    atomicAdd(occulusionCullingNum, 1);
-    //}
-    // error culling
-    //culled = culled || errorCulling(nodeInfo);
-    //if (errorCulling(nodeInfo)) return;
-    //if (errorCulling(nodeInfo)){
-	//	atomicAdd(errorCullingNum, 1);
-	//}
-    // output to nextBVHNodeInfoIndices
+    if (frustrumCulling(nodeInfo)) {
+	    //atomicAdd(frustumCullingNum, 1);
+        return;
+    }
+    if (occlusionCulling(nodeInfo)) {
+        //atomicAdd(occulusionCullingNum, 1);
+        return;
+    }
+    if (errorCulling(nodeInfo)) {
+        //atomicAdd(errorCullingNum, 1);
+        return;
+    }
 
     // output to clusterIndexBuffer
     uint leafClusterSize = nodeInfo.end - nodeInfo.start;
@@ -309,6 +305,7 @@ void main(){
             clusterObjectIndices[clusterStartIndex + i] = nodeInfo.objectId;
 	    }
 	}
+    // output to nextBVHNodeInfoIndices
     else
     {
         // TODO: Optimization

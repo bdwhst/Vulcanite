@@ -65,7 +65,7 @@ TODO: Linux
 
 ### Overview
 
-This project is deeply inspired by Unreal Engine's Nanite Virtual Geometry System, yet it is primarily developed from the ground up. Echoing Richard Feynman's philosophy, "What I cannot create, I do not understand," our aim is to demystify the core principles of Nanite. We endeavor to provide developers with an independent virtual geometry module, distinct from Unreal Engine, enhancing their understanding and application of these advanced rendering techniques.
+This project is deeply inspired by Unreal Engine's Nanite Virtual Geometry System, yet it is primarily developed from the ground up. Echoing Richard Feynman's philosophy, "What I cannot create, I do not understand," our aim is to demystify the core principles of Nanite. We endeavor to provide developers with an independent virtual geometry module, distinct from Unreal Engine, enhancing their understanding and application of these advanced rendering techniques. The following text will use patch and cluster interchangeably, since each triangle cluster are likely to be a patch in space.
 
 #### Basic Idea
 
@@ -81,11 +81,31 @@ To avoid excessive triangle overdraw, it's crucial to establish a hierarchical r
 
 <img src="./images/nanite-build.png" style="zoom: 50%;" />
 
+In our CPU-based Nanite Mesh building pipeline, we execute a series of steps to construct a Nanite mesh effectively. The process involves the following stages:
+
+- Triangle Clustering: Initially, we cluster the individual triangles into distinct clusters. This step is crucial for organizing the mesh data into manageable patches.
+
+
+- Cluster Grouping: Once the triangles are clustered, we then group these clusters. This grouping is essential for handling the mesh at a higher level and sets the stage for further simplification.
+
+
+- Mesh Simplification: For each cluster group, we perform mesh simplification. This process reduces the complexity of the mesh within each group, optimizing it for better performance while maintaining the essential geometric details. This step uses Quadratic Error Metric to perform edge collapse on the mesh.
+
+
+- Re-clustering and Iteration: After simplification, we re-cluster the triangles in these simplified cluster groups. Following this, we return to step 2, grouping these newly formed clusters. This iterative process continues until the mesh is optimally simplified and organized.
+
+
+This pipeline is designed to efficiently process and simplify the mesh on the CPU, preparing it for optimal use in Nanite-enabled rendering environments. The iterative nature of steps 2 to 4 ensures a balanced approach to mesh simplification, maintaining a high level of detail where necessary while optimizing the overall structure for rendering performance.
+
+![](./images/bunny_cluster.png)
+
+![](./images/bunny_cluster_group.png)
+
 #### Runtime LOD Selection
 
 <img src="./images/error-proj.png" style="zoom: 33%;" />
 
-Using the Quadratic Error Metric (QEM), we can project this error onto the screen space. This projection is facilitated by enclosing each patch within a bounding sphere. We maintain a hierarchy where each parent's error and bounding radius are always greater than those of its children. This hierarchy ensures a monotonic relationship, allowing us to evaluate each patch (whether parent or child) independently.
+Using the Quadratic Error Metric (QEM), we can project this error onto the screen space. This projection is facilitated by enclosing each patch within a bounding sphere. We maintain a hierarchy where each parent's error and bounding radius are always greater than those of its children. This hierarchy ensures a monotonic relationship, allowing us to evaluate each patch (whether parent or child) independently. 
 
 #### Mixed Rasterization
 
@@ -111,11 +131,7 @@ Where the lower 32 bits can be used in the shading stage to reconstruct pixel at
 
 ![](./images/render-pipeline.png)
 
-Using nanite scene, we can use different approaches to accelerate the rendering process, 
-
-### Known Bugs
-
-Flickering when view is far, this may due to some synchronization issue, but we currently don't know why.
+Sum those techniques above, we can get this whole rendering pipeline, which is similar to unreal engine's nanite pipeline.
 
 
 ### Performance Analysis
@@ -141,6 +157,14 @@ But due to the randomness of memory access, here we cannot use shared memory to 
 - [Milestone1](https://docs.google.com/presentation/d/1KkI7cfCiym67k_yKQnZ-QDST0Q3UPPoxqMgxU9J9e30/edit?usp=sharing) - GPU-Driven Depth Culling, Clustering & Grouping
 - [Milestone2](https://docs.google.com/presentation/d/1YuY-mJDUGPB7RGOcJs3eZZ68J12EXOHgfcvojIDqEDI/edit?usp=sharing) - DAG, Serialization & Deserialization
 - [Milestone3](https://docs.google.com/presentation/d/1hUoOy5HGEKSDIVfERBmkov804C9v1XEtksona1Azle4/edit?usp=sharing) - Mixed-mode Rasterizer, Multiple Instance, Performance Analysis
+
+### Third Party Code
+
+- Base code: [SaschaWillems/Vulkan: Examples and demos for the new Vulkan API (github.com)](https://github.com/SaschaWillems/Vulkan)
+
+### Known Bugs
+
+Models may flicker when view is far, this may due to some synchronization issue, but we currently don't know why.
 
 ---
 

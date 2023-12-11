@@ -9,7 +9,7 @@ A Vulkan Implementatioin of Nanite in Unreal Engine 5
 **University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project](https://cis565-fall-2023.github.io/)**
 
 
-**Han Yang ([LinkedIn](https://www.linkedin.com/in/andrew-han-yang-0031231a3/) | [Personal Website](https://bdwhst.wixsite.com/portfolio))** and **Yi'an Chen ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
+**[@Han Yang](https://github.com/bdwhst) ([LinkedIn](https://www.linkedin.com/in/andrew-han-yang-0031231a3/) | [Personal Website](https://bdwhst.wixsite.com/portfolio))** and **[@Yian Chen](https://github.com/SydianAndrewChen) ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
 
  <!-- ![Alt text](./images/demo.png) -->
 ![Alt text](./images/demo2.png)

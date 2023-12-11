@@ -1,30 +1,119 @@
 # Vulcanite
 
+**University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project](https://cis565-fall-2023.github.io/)**
+
+Han Yang, Yi'an Chen
+
 ![Alt text](./images/demo.png)
+
+
 
 ### Dependencies
 - metis
 - assimp
 - OpenMesh
+- Vulkan SDK
 
 ### Build
 
-For now, we only test on Windows.
+For now, we only test on Windows. 
 
 For windows users, we recommend that you use [vcpkg](https://github.com/microsoft/vcpkg) to install dependencies.
 
 If you have successfully installed all dependencies through vcpkg, then this program should be able to run normally. 
+
+We recommend you use a script file like this to build this project:
+
+```
+set VCPKG_PATH="C:\vcpkg" ::change this to your own vcpkg directory
+
+for /F %%i in ('dir /b /a ".\build\*"') do (
+    echo if you see this the folder is NOT empty
+    goto clean_build
+)
+goto make_build
+
+:clean_build
+echo "Cleaning build file"
+del build/*
+goto start_build
+
+:make_build
+echo "Making build directory"
+mkdir build
+goto start_build
+
+:start_build
+echo "Start building"
+cd ./build/
+cmake .. -DCMAKE_TOOLCHAIN_FILE=%VCPKG_PATH%\scripts\buildsystems\vcpkg.cmake
+cd ..
+```
 
 TODO: Windows, not using vcpkg
 TODO: Linux 
 
 ### Features Implemented
 
-- [ ] GPU Driven Depth Culling
-- [ ] Nanite Builder
-	- [ ] DAG Builder
-- [ ] Multiple Instance
-- [ ] Mixed-mode Rasterizer
+- [x] GPU Driven View Frustrum Culling and Occlusion Culling
+- [x] BVH Cluster Culling
+- [x] Nanite Builder
+	- [x] DAG Builder
+- [x] Multiple Instance
+- [x] Visibility Buffer Based rendering
+- [x] Mixed-mode Rasterizer
+
+### Overview
+
+This project is deeply inspired by Unreal Engine's Nanite Virtual Geometry System, yet it is primarily developed from the ground up. Echoing Richard Feynman's philosophy, "What I cannot create, I do not understand," our aim is to demystify the core principles of Nanite. We endeavor to provide developers with an independent virtual geometry module, distinct from Unreal Engine, enhancing their understanding and application of these advanced rendering techniques.
+
+#### Basic Idea
+
+The central question we address is how to handle high-polygon-count triangle geometry, especially when numerous triangles shrink to less than one pixel in size after rasterization. Traditional Level of Detail (LOD) methods switch between different mesh resolutions based on the viewer's distance, leading to visual discontinuities during camera movement. Nanite introduces an innovative solution: rather than rendering separate LOD levels, it blends patches from various LODs. This heuristic mixing ensures a seamless and visually coherent output from the current camera perspective.
+
+#### Nanite Mesh Building
+
+<img src="./images/parent-children.png" style="zoom: 33%;" />
+
+To avoid excessive triangle overdraw, it's crucial to establish a hierarchical relationship among patches across different LOD levels, ensuring they cover identical areas. Nanite employs a sophisticated technique to maintain this hierarchy and facilitate smooth transitions: it simplifies triangles within the same cluster group, followed by re-grouping and re-clustering. Here we implemented nanite building pipeline based on OpenMesh and Metis.
+
+<img src="./images/nanite-build.png" style="zoom: 50%;" />
+
+#### Runtime LOD Selection
+
+<img src="./images/error-proj.png" style="zoom: 33%;" />
+
+Using the Quadratic Error Metric (QEM), we can project this error onto the screen space. This projection is facilitated by enclosing each patch within a bounding sphere. We maintain a hierarchy where each parent's error and bounding radius are always greater than those of its children. This hierarchy ensures a monotonic relationship, allowing us to evaluate each patch (whether parent or child) independently.
+
+#### Mixed Rasterization
+
+For large triangles covering numerous pixels, hardware rasterization is highly efficient. Conversely, for smaller triangles — those spanning only a few pixels or slightly more — software rasterization proves to be much faster. In our software rasterization process, we employ a 64-bit texture: the upper 32 bits store depth information, while the lower 32 bits hold visibility buffer data. This approach ensures an effective Z-test during rasterization, optimizing performance for varying triangle sizes.
+
+Here our image layout in software rasterization stage is this:
+
+| Depth | ClusterId | ObjectId | TriangleId |
+| ----- | --------- | -------- | ---------- |
+| 32    | 15        | 11       | 6          |
+
+Where the lower 32 bits can be used in the shading stage to reconstruct pixel attribute values. A visualization of the visibility buffer is shown as below:
+
+![](./images/visibility-buffer.png)
+
+
+
+#### Cluster Culling With BVH
+
+
+
+#### Rendering Pipeline
+
+![](E:\Code\Vulcanite\images\render-pipeline.png)
+
+Using nanite scene, we can use different approaches to accelerate the rendering process, 
+
+### Known Bugs
+
+Flickering when view is far, this may due to some synchronization issue, but we currently don't know why.
 
 
 ### Performance Analysis
@@ -44,31 +133,31 @@ TODO: Linux
 
 ### TODOs
 
-- [ ] CPU Side
-	- [ ] Mesh simplification
-		- [ ] Lock edge on cluster group boundaries
-	- [ ] Cluster & Cluster group
-		- [ ] Learn about METIS (or other available algorithms for triangle clustering)
-		- [ ] Is forming cluster group exactly the same as forming cluster?
-	- [ ] Core Algorithm
+- [x] CPU Side
+	- [x] Mesh simplification
+		- [x] Lock edge on cluster group boundaries
+	- [x] Cluster & Cluster group
+		- [x] Learn about METIS (or other available algorithms for triangle clustering)
+		- [x] Is forming cluster group exactly the same as forming cluster?
+	- [x] Core Algorithm
 		Given cluster & cluster group
-		- [ ] Mesh simplification (lock boundaries of cluster group)
-		- [ ] Re-Cluster
-		- [ ] Recalculate cluster groups
-		- [ ] Maintain a LOD BVH Tree for each level
-	- [ ] Nanite Mesh Exporter
-		- [ ] Mesh LOD
-		- [ ] BVH Tree
+		- [x] Mesh simplification (lock boundaries of cluster group)
+		- [x] Re-Cluster
+		- [x] Recalculate cluster groups
+		- [x] Maintain a LOD BVH Tree for each level
+	- [x] Nanite Mesh Exporter
+		- [x] Mesh LOD
+		- [x] BVH Tree
 		- [ ] Data Compression
 	
-- [ ]  GPU Side
-	- [ ] Runtime LOD
+- [x]  GPU Side
+	- [x] Runtime LOD
 	
-	- [ ] Soft ras
+	- [x] Soft ras
 	
-	- [ ] Hard ras
+	- [x] Hard ras
 	
-		- [ ] Mesh shader
+		- [x] Mesh shader
 	  
 	- [ ] Customized depth test
 	
@@ -92,295 +181,4 @@ TODO: Linux
 - [Karis Nanite Talk SIG2021](https://advances.realtimerendering.com/s2021/Karis_Nanite_SIGGRAPH_Advances_2021_final.pdf)
 
 - [GAMES104_Lecture22.pdf (myqcloud.com)](https://games-1312234642.cos.ap-guangzhou.myqcloud.com/course/GAMES104/GAMES104_Lecture22.pdf)
-
-
-### Log
-
-11.8
-
-> We will not use OpenMesh to load mesh anymore. Consider using assimp.
-Two reasons mainly:
-1. OpenMesh is too slow.
-	- 50 seconds to load `dragon.obj`. 800k faces
-	- 6 seonds to load `bunny.obj`. 60k faces
-2. If we want to use half-edge data structure, that would require us to maintain this structure after every mesh simplification. Gonna bring a lot of problem.
-
-A better solution
-- Use `assimp` to load obj
-	- Note: `assimp` is also not very fast when loading meshes.
-		- 15 seconds to load `dragon.obj`. 800k faces
-		- 1.2 seonds to load `bunny.obj`. 60k faces
-- Construct adjacency graph 
-
-11.9
-
-- vkgltf -> OpenMesh -> Clustering -> Cluster Grouping -> Simplification -> Re-clustering -> ... (Until only one cluster group)
-
-
-11.10
-
-Cluster result visualization
-Only test 5 clusters for now
-- Incorrect?
-	- Why are triangles that are not even adjacent getting assigned into the same cluster??? Is this right?
-	- May need to dig deeper into graph partition part...``
-	![Alt text](./images/cluster_result_2023_11_10.png)
-
-11.11
-
-This might be because that each parts of teapot are not even connected???
-
-![Alt text](./images/teapot_inside.png)
-
-Clustering now works fine with fixed size 32.
-Howeve, the size is not fixed and it will fluctuate between 31 ~ 33.
-We need to consider **if it will bring more problems**.
-It should be solvable without using recursive partition?
-
----
-- Milestone of cluster & cluster group
-<table>
-    <tr>
-        <th>Cluster</th>
-        <th>Cluster Group</th>
-    </tr>
-    <tr>
-        <th><img src="./images/bunny_cluster.png" /></th>
-        <th><img src="./images/bunny_cluster_group.png" /></th>
-    </tr>
-</table>
-
-![](./images/clustering_2023_11_11.gif)
-
-- Milestone of Dynamic LOD selection (Red: LOD 0 Green: LOD 1 Blue: LOD 2)
-
-![](./images/dynamic_lod_basic.gif)
-
-- **Limitations**
-  - Not fixed size
-  - Unconnected mesh
-
-
-11.12
-
-- TODO
-	- [ ] Fix unconnected mesh issues?
-		- [ ] How to fix it?
-	- [ ] Build the whole cpu part pipeline
-
-Draft version of implementation
-```cpp
-struct Cluster{
-	std::map<int, int> neighborsAndCosts;
-	std::vector<uint32_t> triangles;
-};
-
-struct ClusterGroup{
-	std::map<int, int> neighborsAndCosts;
-	std::vector<uint32_t> boundaries;
-};
-
-struct Mesh{
-	std::vector<Cluster> clusters;
-	std::vector<ClusterGroup> clusterGroups;
-};
-
-struct NaniteMesh{
-	uint32_t lod_nums;
-	std::vector<Mesh> meshes;
-};
-```
-
-11.15
-Steps
-- [x] Implement `Mesh` class. Generate cluster/cluster group index for lod0
-- [x] Implement `Cluster` & `ClusterGroup` class
-- [x] Generate cluster/cluster group info for the rest of lods
-- [ ] Lock edges
-- [ ] Consider refreshing cmd buffer to see clustering of each lod
-- [ ] Build DAG/BVH for nanite infos.
-	- Before simplification:
-	- [ ] We need to store the ~~vertex~~ half-edge handles of boundaries (so that we know which face is inside)
-		- [ ] This is based on the assumption that handles will still be valid after simplification
-		- [ ] If we find out that handles turn out to be invalid in some cases?
-			- [ ] Consider storing an extra attribute that represents the cluster group
-	- After simplification:
-	- [ ] With all the boundaries, we can now do a simple graph traversal
-	- [ ] We need to build triangle graph first for the simplified mesh
-		- [ ] Simply use non-recursive BFS
-- [ ] Serialize
-	- Consider
-	- [ ] protobuf (High priority)
-	- [ ] boost (Low priority)
-
-
-11.18
-- Bad News: We may use the wrong clustering step.
-	- Do clustering within each cluster group.
-	- How to do decimation within one cluster group?
-
-11.26
-
-Basic Dynamic LOD
-
-12.1
-
-Multi-instance
-- We can use drawIndirect struct to easily implement multi-instance
-- However, we need to consider how we should 
-- Cluster/culling
-- Top view
-
-每个ClusterInfo以及ErrorInfo都需要存多份，同时多份里面分别存一个objectid，但是在Culling时不需要读取这个objectId，
-需要搞清楚怎么在compute shader之后创建一个新的buffer作为输出，同时输入到另一个stage里
-因为objectId目前只用于获取当前对应的modelMatrix，而ClusterInfo和ErrorInfo都是经过变换的，所以只需要在最后culling输出的时候需要存入这个objectId。
-在culling之前，输入一个ObjectId数组，经过culling之后，输出一个新的ObjectId数组，这个数组和后面的三角形一一对应，同时对应着modelMatrices
-
-
-在culling中，如果我输入了两份的clusterInfo，就会产出一个带有offset的culled indices，同时就算这个indices带有objectId，也很难区分，除非再加一个instance层
-
-每个pipeline
-	对于compute pipeline来说
-		含有一个pipeline layout，这个pipeline layout含有一个descriptor layout，以及push constant相关的信息。
-		一个stage，对应着当前pipeline属于哪个阶段
-
-对于每个着色器
-	可能有多个descriptor sets（如果我们需要对不同的物体进行同样流程的绘制，就需要不同的descriptor sets），每个set里面有多个bindings。
-	只有一个set layout（可能需要多个？如果当前着色器在一次绘制中用了多个descriptor sets的话）用来告诉当前shader各个
-
-
-
-如何解决vs无法访问primitveID的问题？
-	1. gs
-	2. 额外创建一个compute shader，这个shader需要做到：
-		生成一个per-vertex的attribute，这个attribute代表当前的primitveId，然而做不到，因为如果有多个实例的情况下，可能会有一个attribute
-		index buffer			: 0 1 2 | 0 1 2 | 5 6 7
-		object index buffer		: 0 0 0 | 1 1 1 | 0 0 0
-		primtive index buffer 	: 0/1 | 0/1 | 0/1 
-		不能在vertex shader里解决这个问题！
-		需要后置
-
-		正确的做法应该是：直接将culledIndices和objectIndices合在一起通过computeShader生成一个visibilityBuffer
-		如何创建？
-
-
-12.2 
-
-Multiple mesh 现在的问题：
-![Alt text](./images/multiple_object_broken.png)
-
-可能是什么引起的呢？
-- 对于dragon来说，它的索引应该是指不到bunny的mesh才对的，而对于bunny来说，它的objectId又更不应该对应dragon的modelMatrix。所以这种情况出现就是违背了前面两个条件的其中一种，但是如果是dragon的索引指向了bunny的vertex，最终出来的兔子耳朵不会这么完整，所以更可能的情况是：bunny的objectId指向了dragon。但是为什么在没有多个mesh的时候就没有出现这个情况呢？
-
-
-12.3
-
-关于BVH和MPMC，根据slide提供的数据以及GAMES104，感觉目前优先级比较高的应该还是实现BVH，然后考虑怎么在compute shader里面先做最基础的树的遍历，这个最基础的树的遍历应该就可以节省很多性能了，MPMC能够提供的大概有30%的提升。
-
-构建BVH：
-	- 还是在CPU侧，需要将children cluster indices留存下来
-	- 在GPU侧，如何使多个working thread共享一片内存？
-		- 直接访问buffer即可
-		- 同时我需要知道当前BVH的大致信息：起码要知道第一层多少个node（第一层指定thread时需要知道），以及知道每一层最多几个node（开辟buffer时需要）
-		- 对于同一层的working thread，我需要考虑：当前层数下所有node的parentError（具sig slide所说，只需要parentError，但是我们反正也存了当前节点的lod error），开辟两片buffer，一片buffer为临时的用来存储cluster node的区域，这片区域存储所有临时的应该被遍历的cluster index，另一篇区域存储所有最终将会被送到culling这一步的cluster
-	- 为什么GAMES104中说leaf node是以cluster group为单位？
-
-	似乎我对于这个里面的BVH过度理解了，它所说的BVH似乎就是对每个LOD各自都构建一个BVH？
-	那么workthread如何判断的呢？
-	先判断LOD0，如果
-
-12.4
-
-BVH Traversal
-
-- First we should write something like this
-
-```cpp
-
-VkBuffer allNodeInfos;
-VkBuffer currNodeInfoList;
-VkBuffer nextNodeInfoList;
-
-VkPipeline bvhTraversePipeline;
-VkPipelineLayout bvhTraversePipelineLayout;
-
-1. Create buffer;
-2. Create descriptor set & layout with buffer;
-3. Create pipeline layout with descriptor layout;
-4. Write shader of traversing
-	4-a. Before traversing, push virtual node in.
-	4-b. Do traversal. Co valid chilren into nextNodeInfoList;
-	4-c. Swap currNodeInfoList & nextNodeInfoList. CLEAR currNodeInfoList;
-	4-d. 
-5. Creaete buffer barrier between traverse and culling;
-
-
-// We need two descriptor layout? to do swapchain? 
-// Or even worse, we might need two pipeline?
-
-struct TraverseJob
-{
-	uint32_t level;
-	uint32_t nodeStart;
-	uint32_t nodeCount;
-};
-
-void traverseBVH()
-{
-	for	(i < maxLevel)
-	{
-		TraverseJob job;
-		job.level = i;
-		job.nodeStart = 
-	}
-}
-
-void traverseCurrLevel(TraverseJob & job);
-
-```
-
-12.5
-TODO: 看Instance以及NaniteScene，看下是lod层的offset出问题了还是object层的offset出问题了
-
-12.7
-检查children index是否出错了
-
-构建compute pipelinee
-
-```cpp
-two subpasses
-
-
-```
-
-12.8
-
-相当迷惑的两个问题
-都是关于Vulkan内存分配的问题
-
----
-
-首先是内存对齐的问题
-```cpp
-
-
-```
-不知道为什么在shader侧的alignment似乎会变得很大。
-
----
-
-然后是目前遇到的一个createBuffer的问题
-
-目前在调用以下代码创建buffer的时候：
-```cpp
-VK_CHECK_RESULT(vulkanDevice->createBuffer(
-	VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-	VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-	scene.maxDepthCounts * sizeof(uint32_t),
-	&currNodeInfosBuffer.buffer,
-	&currNodeInfosBuffer.memory,
-	nullptr));
-```
-会神奇的创建出一个size只有一半的buffer，这个buffer的size计算没有错，在创建之后CPU端获取memory requirement的size也没有错，但是到nsight graphics里面就显示只有一般的大小，导致了一些奇怪的行为。
-
 

@@ -281,8 +281,8 @@ void main()
 	vec3 V = normalize(ubo.camPos - worldPos.xyz);
 	vec3 R = reflect(-V, N); 
 
-	float metallic = 0.1f;
-	float roughness = 0.8f;
+	float metallic = 0.9f;
+	float roughness = 0.01f;
 
 	vec3 F0 = vec3(0.04); 
 	F0 = mix(F0, ALBEDO, metallic);

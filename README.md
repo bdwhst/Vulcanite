@@ -1,13 +1,13 @@
----
-TODO: 
-Dependencies
-	- Windows, not using vcpkg
-	- Linux 
----
+<div style="text-align:center">
 
-# Vulcanite
+## Vulkanite
+
+A Vulkan Implementatioin of Nanite in Unreal Engine 5
+
+</div>
 
 **University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project](https://cis565-fall-2023.github.io/)**
+
 
 **Han Yang ([LinkedIn]() | [Personal Website]())** and **Yi'an Chen ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
 

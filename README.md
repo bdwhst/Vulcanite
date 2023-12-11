@@ -9,7 +9,7 @@ Dependencies
 
 **University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project](https://cis565-fall-2023.github.io/)**
 
-**Han Yang ([LinkedIn]() | [Personal Website]())** and **Yi'an Chen ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
+**Han Yang ([LinkedIn](https://www.linkedin.com/in/andrew-han-yang-0031231a3/) | [Personal Website](https://bdwhst.wixsite.com/portfolio))** and **Yi'an Chen ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
 
  <!-- ![Alt text](./images/demo.png) -->
 ![Alt text](./images/demo2.png)
@@ -98,7 +98,7 @@ In our CPU-based Nanite Mesh building pipeline, we execute a series of steps to 
 - Re-clustering and Iteration: After simplification, we re-cluster the triangles in these simplified cluster groups. Following this, we return to step 2, grouping these newly formed clusters. This iterative process continues until the mesh is optimally simplified and organized.
 
 
-This pipeline is designed to efficiently process and simplify the mesh on the CPU, preparing it for optimal use in Nanite-enabled rendering environments. The iterative nature of steps 2 to 4 ensures a balanced approach to mesh simplification, maintaining a high level of detail where necessary while optimizing the overall structure for rendering performance.
+This pipeline is designed to efficiently process and simplify the mesh on the CPU, preparing it for optimal use in Nanite-enabled rendering environments. The iterative nature of steps 2 to 4 ensures a balanced approach to mesh simplification, maintaining a high level of detail where necessary while optimizing the overall structure for rendering performance. Here are two pictures of cluster and cluster groups.
 
 ![](./images/bunny_cluster.png)
 

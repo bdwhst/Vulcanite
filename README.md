@@ -1,6 +1,13 @@
-# Vulcanite
+<div style="text-align:center">
+
+## Vulkanite
+
+A Vulkan Implementatioin of Nanite in Unreal Engine 5
+
+</div>
 
 **University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project](https://cis565-fall-2023.github.io/)**
+
 
 **Han Yang ([LinkedIn](https://www.linkedin.com/in/andrew-han-yang-0031231a3/) | [Personal Website](https://bdwhst.wixsite.com/portfolio))** and **Yi'an Chen ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
 

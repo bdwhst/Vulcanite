@@ -1071,9 +1071,9 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -10; i <= 10; i++)
+		for (int i = -0; i <= 0; i++)
 		{
-			for (int j = -10; j <= 10; j++) 
+			for (int j = -0; j <= 0; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);

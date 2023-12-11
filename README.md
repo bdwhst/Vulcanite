@@ -99,7 +99,9 @@ This pipeline is designed to efficiently process and simplify the mesh on the CP
 
 <img src="./images/error-proj.png" style="zoom: 33%;" />
 
-Using the Quadratic Error Metric (QEM), we can project this error onto the screen space. This projection is facilitated by enclosing each patch within a bounding sphere. We maintain a hierarchy where each parent's error and bounding radius are always greater than those of its children. This hierarchy ensures a monotonic relationship, allowing us to evaluate each patch (whether parent or child) independently. 
+Using the Quadratic Error Metric (QEM), we can project this error onto the screen space. This projection is facilitated by enclosing each patch within a bounding sphere. We maintain a hierarchy where each parent's error and bounding radius are always greater than those of its children. This hierarchy ensures a monotonic relationship, allowing us to evaluate each patch (whether parent or child) independently. Here using the Stanford dragon as an example, we showed the change of LOD levels with camera movement.
+
+![](./images/dynamic_lod_dragon.gif)
 
 #### Mixed Rasterization
 

@@ -76,6 +76,8 @@ The central question we address is how to handle high-polygon-count triangle geo
 
 #### Nanite Mesh Building
 
+
+
 <img src="./images/parent-children.png" style="zoom: 33%;" />
 
 To avoid excessive triangle overdraw, it's crucial to establish a hierarchical relationship among patches across different LOD levels, ensuring they cover identical areas. Nanite employs a sophisticated technique to maintain this hierarchy and facilitate smooth transitions: it simplifies triangles within the same cluster group, followed by re-grouping and re-clustering. Here we implemented nanite building pipeline based on `OpenMesh` and `METIS`.
@@ -127,7 +129,7 @@ Instancing is crucial in Nanite for efficiently rendering scenes with over 1 bil
 
 #### Rendering Pipeline
 
-![](.\images\render-pipeline.png)
+![](./images/render-pipeline.png)
 
 Using nanite scene, we can use different approaches to accelerate the rendering process, 
 
@@ -144,6 +146,19 @@ Mesh decimation is not robust enough. For now, it only accepts mesh whose faces 
 
 ![](images/performance.png)
 
+#### NSight GPU Trace 
+
+This trace result is produced on NVidia RTX 4080 laptop GPU.
+
+![](./images/nsight-gputrace.png)
+
+We can see from the graph that there are two stages that have a high proportion of active SM unused warp slots, the first stage is fine culling stage, the second stage is hardware rasterization stage. And since our code in that two stages doesn't have much divergence, we thought the main reason for unused warp slots are delay from global memory access.
+
+Further investigation proved our guess. As in those shaders that most stalls are caused by a memory load or store.
+
+![](./images/hwr-stall.png)
+
+But due to the randomness of memory access, here we cannot use shared memory to reduce global memory access. A great idea is to do stream compaction on those global array so that the memory access are much more consistent.
 
 - Software Rasterization On/Off
 	> Please note that this test is run with runtime cluster-level lod always on, which is why framerate is high even when all optimizations are off.

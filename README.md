@@ -1,18 +1,24 @@
+---
+TODO: 
+Dependencies
+	- Windows, not using vcpkg
+	- Linux 
+---
+
 # Vulcanite
 
 **University of Pennsylvania, [CIS 565: GPU Programming and Architecture, Final Project](https://cis565-fall-2023.github.io/)**
 
-Han Yang, Yi'an Chen
+**Han Yang ([LinkedIn]() | [Personal Website]())** and **Yi'an Chen ([LinkedIn](https://www.linkedin.com/in/yian-chen-33a31a1a8/) | [Personal Website](https://sydianandrewchen.github.io/blog/))**
 
-![Alt text](./images/demo.png)
-
+ <!-- ![Alt text](./images/demo.png) -->
+![Alt text](./images/demo2.png)
 
 
 ### Dependencies
-- metis
-- assimp
-- OpenMesh
-- Vulkan SDK
+- `metis`
+- `OpenMesh`
+- `Vulkan`
 
 ### Build
 
@@ -50,9 +56,6 @@ cmake .. -DCMAKE_TOOLCHAIN_FILE=%VCPKG_PATH%\scripts\buildsystems\vcpkg.cmake
 cd ..
 ```
 
-TODO: Windows, not using vcpkg
-TODO: Linux 
-
 ### Features Implemented
 
 - [x] GPU Driven View Frustrum Culling and Occlusion Culling
@@ -75,7 +78,7 @@ The central question we address is how to handle high-polygon-count triangle geo
 
 <img src="./images/parent-children.png" style="zoom: 33%;" />
 
-To avoid excessive triangle overdraw, it's crucial to establish a hierarchical relationship among patches across different LOD levels, ensuring they cover identical areas. Nanite employs a sophisticated technique to maintain this hierarchy and facilitate smooth transitions: it simplifies triangles within the same cluster group, followed by re-grouping and re-clustering. Here we implemented nanite building pipeline based on OpenMesh and Metis.
+To avoid excessive triangle overdraw, it's crucial to establish a hierarchical relationship among patches across different LOD levels, ensuring they cover identical areas. Nanite employs a sophisticated technique to maintain this hierarchy and facilitate smooth transitions: it simplifies triangles within the same cluster group, followed by re-grouping and re-clustering. Here we implemented nanite building pipeline based on `OpenMesh` and `METIS`.
 
 <img src="./images/nanite-build.png" style="zoom: 50%;" />
 
@@ -102,12 +105,29 @@ Where the lower 32 bits can be used in the shading stage to reconstruct pixel at
 
 
 #### Cluster Culling With BVH
+The BVH plays a pivotal role in the Nanite pipeline as an acceleration structure, consistent with its historical application. Within Nanite, the BVH serves to speed up cluster culling during subsequent phases. Leveraging its spatial hierarchical structure enables the rapid elimination of numerous clusters that don't necessitate iteration.
 
+Culling operations using BVH closely mirror previous practices, including frustum culling and occlusion culling based on the bounding boxes of BVH nodes. Subsequent to these initial steps, the culling process extends to clusters, incorporating evaluation criteria such as `parentError` and `clusterError`:
 
+```cpp
+Render: parentError > threshold && clusterError <= threshold
+Cull:   parentError <= threshold || clusterError > threshold
+```
+
+The integration of BVH as an acceleration structure facilitates traversing clusters from an entire mesh down to individual small clusters. Consequently, using `parentError <= threshold` as the culling condition efficiently handles all child clusters associated with the current BVH nodes. This means that apart from the bounding box, we also need to store the maximum of `parentNormalizedError` and the largest `parentBoundingSphere`, which are needed to get the highest `parentError`.
+
+This approach of coarse culling allows for the pre-culling of over 80% of clusters within the scene. This optimization yields an average performance increase of around 30%.
+
+#### Nanite Instancing
+Instancing is crucial in Nanite for efficiently rendering scenes with over 1 billion triangles, minimizing GPU memory usage by eliminating repeated triangles and vertices. Due to our GPU-driven pipelines, direct modification of `instanceCount` in `vkDrawIndexedIndirect` is challenging. Instancing is implemented in the preparation stage at two levels: 
+
+1. Primitive-Level Instancing: Assigning a unique `objectId` to each cluster removes redundant triangles, allowing for optimal GPU memory usage and rendering scenes with up to **hundreds of millions** of triangles.
+
+2. Cluster-Level Instancing: By assigning an `objectId` from parent BVH nodes, repeated clusters are eliminated. This level of instancing facilitates rendering scenes with over **1 billion** triangles while fully utilizing GPU memory.
 
 #### Rendering Pipeline
 
-![](E:\Code\Vulcanite\images\render-pipeline.png)
+![](.\images\render-pipeline.png)
 
 Using nanite scene, we can use different approaches to accelerate the rendering process, 
 
@@ -115,11 +135,21 @@ Using nanite scene, we can use different approaches to accelerate the rendering 
 
 Flickering when view is far, this may due to some synchronization issue, but we currently don't know why.
 
+Mesh decimation is not robust enough. For now, it only accepts mesh whose faces are all connected. 
 
 ### Performance Analysis
 
+- Cluster-level LOD On/Off
+	- Tested on: Windows 10, AMD Ryzen 5800 HS with Radeon Graphics CPU @ 3.20GHz 16GB, NVIDIA GeForce RTX3060 Laptop 8GB
+
 ![](images/performance.png)
 
+
+- Software Rasterization On/Off
+	> Please note that this test is run with runtime cluster-level lod always on, which is why framerate is high even when all optimizations are off.
+	- Tested on: Windows 11, i9-12900HX @ 2.30GHz 16GB, RTX4080 laptop 12GB
+
+![](images/performance2.png)
 
 ### Miletone Slides
 
@@ -145,10 +175,11 @@ Flickering when view is far, this may due to some synchronization issue, but we 
 		- [x] Re-Cluster
 		- [x] Recalculate cluster groups
 		- [x] Maintain a LOD BVH Tree for each level
+	- [x] BVH Builder
 	- [x] Nanite Mesh Exporter
 		- [x] Mesh LOD
-		- [x] BVH Tree
 		- [ ] Data Compression
+	- [ ] Parallel building
 	
 - [x]  GPU Side
 	- [x] Runtime LOD
@@ -158,7 +189,11 @@ Flickering when view is far, this may due to some synchronization issue, but we 
 	- [x] Hard ras
 	
 		- [x] Mesh shader
-	  
+	
+	- [ ] BVH Traversal
+	  	- [x] Naive Traversal
+		- [ ] MPMC
+	
 	- [ ] Customized depth test
 	
 	- [ ] Tile based deferred materials

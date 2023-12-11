@@ -39,7 +39,7 @@ def create_nvidia_style_chart(data, data_names, labels, title="Nvidia-Style Char
     """
     # 设置图表样式
     plt.figure(figsize=figsize)
-    plt.ylim(0, 60)
+    plt.ylim(0, 500)
     # 隐藏 x 轴上的小竖线
     plt.tick_params(axis='x', which='both', bottom=False)
 
@@ -89,21 +89,21 @@ def create_nvidia_style_chart(data, data_names, labels, title="Nvidia-Style Char
 
     # 显示图表
     # plt.show()
-    plt.savefig('../images/performance.png', dpi=300, bbox_inches='tight')
+    plt.savefig('../images/performance2.png', dpi=300, bbox_inches='tight')
 
 # 示例数据
 labels = [
-    '0.05 billion', 
-    '0.1 billion', 
-    '0.2 billion',
-    '0.4 billion'
+    '0.4 billion',
+    '0.6 billion', 
+    '0.8 billion', 
+    '1.0 billion',
     ]
-data_names = ['No Culling', 'Frustum & Occulusion Culling', 'Cluster-level Culling']
+data_names = ['Swr off & Culling off', 'Swr off & Culling on', 'Swr on & Culling on']
 data = [
-    [ 2,  0,  0,  0],
-    [ 5,  3,  1,  0],
-    [40, 37, 35, 30],
+    [ 109,  84,   71,   54],
+    [ 381,  336,  270,  251],
+    [ 477,  420,  353,  320],
     ]
 
 # 调用函数生成Nvidia风格的图表
-create_nvidia_style_chart(data, data_names, labels, title="Performance of Culling", x_label="Triangles on screen", y_label="Framerate", figsize=(15, 6))
+create_nvidia_style_chart(data, data_names, labels, title="Performance of SoftRas", x_label="Triangles on screen", y_label="Framerate", figsize=(15, 6))

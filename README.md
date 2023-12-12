@@ -62,7 +62,7 @@ cd ..
 - [x] BVH Cluster Culling
 - [x] Nanite Builder
 	- [x] DAG Builder
-- [x] Multiple Instance
+- [x] Multiple Instances of Multiple Nanite Meshes
 - [x] Visibility Buffer Based rendering
 - [x] Mixed-mode Rasterizer
 
@@ -138,7 +138,7 @@ Cull:   parentError <= threshold || clusterError > threshold
 
 The integration of BVH as an acceleration structure facilitates traversing clusters from an entire mesh down to individual small clusters. Consequently, using `parentError <= threshold` as the culling condition efficiently handles all child clusters associated with the current BVH nodes. This means that apart from the bounding box, we also need to store the maximum of `parentNormalizedError` and the largest `parentBoundingSphere`, which are needed to get the highest `parentError`.
 
-This approach of coarse culling allows for the pre-culling of over 80% of clusters within the scene. This optimization yields an average performance increase of around 30%.
+This approach of coarse culling allows for the pre-culling of over **80%** of clusters within the scene. This optimization yields an average performance increase of around **100%**.
 
 #### Nanite Instancing
 Instancing is crucial in Nanite for efficiently rendering scenes with over 1 billion triangles, minimizing GPU memory usage by eliminating repeated triangles and vertices. Due to our GPU-driven pipelines, direct modification of `instanceCount` in `vkDrawIndexedIndirect` is challenging. Instancing is implemented in the preparation stage at two levels: 
@@ -153,14 +153,18 @@ Instancing is crucial in Nanite for efficiently rendering scenes with over 1 bil
 
 Sum those techniques above, we can get this whole rendering pipeline, which is similar to unreal engine's nanite pipeline.
 
-Mesh decimation is not robust enough. For now, it only accepts mesh whose faces are all connected. 
-
 ### Performance Analysis
+> All performance analysis are tested with meshes that have fragment shaders using IBL & PBR.
 
 - Cluster-level LOD On/Off
 	- Tested on: Windows 10, AMD Ryzen 5800 HS with Radeon Graphics CPU @ 3.20GHz 16GB, NVIDIA GeForce RTX3060 Laptop 8GB
 
 ![](images/performance.png)
+
+- BVH On/Off
+	- Tested on: Windows 10, AMD Ryzen 5800 HS with Radeon Graphics CPU @ 3.20GHz 16GB, NVIDIA GeForce RTX3060 Laptop 8GB
+
+![](images/performance3.png)
 
 #### NSight GPU Trace 
 
@@ -197,6 +201,7 @@ But due to the randomness of memory access, here we cannot use shared memory to 
 
 Models may flicker when view is far, this may due to some synchronization issue, but we currently don't know why.
 
+Mesh decimation is not robust enough. For now, it only accepts mesh whose faces are all connected. 
 ---
 
 **Below are for developers**
@@ -228,7 +233,7 @@ Models may flicker when view is far, this may due to some synchronization issue,
 	
 	- [x] Hard ras
 	
-		- [x] Mesh shader
+		- [ ] Mesh shader
 	
 	- [ ] BVH Traversal
 	  	- [x] Naive Traversal

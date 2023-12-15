@@ -202,6 +202,7 @@ But due to the randomness of memory access, here we cannot use shared memory to 
 Models may flicker when view is far, this may due to some synchronization issue, but we currently don't know why.
 
 Mesh decimation is not robust enough. For now, it only accepts mesh whose faces are all connected. 
+
 ---
 
 **Below are for developers**

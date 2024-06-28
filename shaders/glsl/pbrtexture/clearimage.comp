@@ -30,5 +30,5 @@ void main()
         swrDispatch.z = 1;
     }
     if(index.x>=screenSize.x || index.y>=screenSize.y) return;
-    imageStore(swrDepthVisBuffer,index,i64vec4(0x0000000000000000L));
+    imageStore(swrDepthVisBuffer,index,u64vec4(0x0000000000000000UL));
 }

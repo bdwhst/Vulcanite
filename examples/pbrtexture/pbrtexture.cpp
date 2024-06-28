@@ -265,6 +265,11 @@ public:
 
 	VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT imageAtomicInt64Feature{};
 
+	VkFence inFlightFence;
+	VkFence rasterizeFinishedFence;
+
+	std::vector<VkCommandBuffer> preDrawCommandBuffers;
+
 	int vis_clusters_level = 0;
 	int topViewWidth = width / 5, topViewHeight = height / 5;
 
@@ -541,15 +546,54 @@ public:
 			*  Culling
 			*
 			*/
+			/*bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = hwrDrawIndexedIndirectBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = swrNumVerticesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);*/
+
+
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
 			//cullingPushConstants.numClusters = naniteMesh.meshes[0].clusters.size();
 			cullingPushConstants.threshold = thresholdInt / thresholdIntDiv;
 			cullingPushConstants.numClusters = scene.maxClusterNum;
 			vkCmdPushConstants(drawCmdBuffers[i], cullingPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(CullingPushConstants), &cullingPushConstants);
 			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipelineLayout, 0, 1, &descManager->getSet("culling", 0), 0, 0);
-			//vkDeviceWaitIdle(device);
-			//std::cout << "333" << std::endl;
 			vkCmdDispatch(drawCmdBuffers[i], (cullingPushConstants.numClusters + 31) / 32, 1, 1);
+
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = hwrDrawIndexedIndirectBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = swrNumVerticesBuffer.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			imageMemBarrier.image = textures.hizbuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -591,7 +635,7 @@ public:
 			bufferBarrier.buffer = HWRIDBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 
 			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -622,14 +666,30 @@ public:
 			bufferBarrier.size = VK_WHOLE_SIZE;
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
+			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
+
+			VK_CHECK_RESULT(vkBeginCommandBuffer(preDrawCommandBuffers[i], &cmdBufInfo));
+
 			/*
 			*
 			*  Software Rasterize
 			*
 			*/
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipelineLayout, 0, 1, &descManager->getSet("clearImage", 0), 0, 0);
-			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			imageMemBarrier.image = SWRBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipeline);
+			vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, clearImagePipelineLayout, 0, 1, &descManager->getSet("clearImage", 0), 0, 0);
+			vkCmdDispatch(preDrawCommandBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
 			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
@@ -638,7 +698,16 @@ public:
 			bufferBarrier.buffer = swrIndirectDispatchBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+
+			bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
+			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			bufferBarrier.buffer = uniformBuffers.object.buffer;
+			bufferBarrier.offset = 0;
+			bufferBarrier.size = VK_WHOLE_SIZE;
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			imageMemBarrier.image = SWRBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -650,12 +719,12 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipelineLayout, 0, 1, &descManager->getSet("swRast", 0), 0, 0);
-			vkCmdDispatchIndirect(drawCmdBuffers[i], swrIndirectDispatchBuffer.buffer, 0);
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipeline);
+			vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, swrComputePipelineLayout, 0, 1, &descManager->getSet("swRast", 0), 0, 0);
+			vkCmdDispatchIndirect(preDrawCommandBuffers[i], swrIndirectDispatchBuffer.buffer, 0);
 			//vkCmdDispatch(drawCmdBuffers[i], (scene.visibleIndicesCount / 3 + 31) / 32, 1, 1);
 
 			imageMemBarrier.image = SWRBuffer.image;
@@ -668,7 +737,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 
 			/*
@@ -693,16 +762,16 @@ public:
 			renderPassBeginInfo1.renderArea.extent.height = height;
 			renderPassBeginInfo1.clearValueCount = 2;
 			renderPassBeginInfo1.pClearValues = clearValues1;
-			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo1, VK_SUBPASS_CONTENTS_INLINE);
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, hwrastPipeline);
-			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, hwrastPipelineLayout, 0, 1, &descManager->getSet("hwRast", 0), 0, NULL);
-			vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+			vkCmdBeginRenderPass(preDrawCommandBuffers[i], &renderPassBeginInfo1, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, hwrastPipeline);
+			vkCmdSetViewport(preDrawCommandBuffers[i], 0, 1, &viewport);
+			vkCmdSetScissor(preDrawCommandBuffers[i], 0, 1, &scissor);
+			vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, hwrastPipelineLayout, 0, 1, &descManager->getSet("hwRast", 0), 0, NULL);
+			vkCmdBindIndexBuffer(preDrawCommandBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 			VkDeviceSize offsets[1] = { 0 };
-			vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-			vkCmdDrawIndexedIndirect(drawCmdBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
-			vkCmdEndRenderPass(drawCmdBuffers[i]);
+			vkCmdBindVertexBuffers(preDrawCommandBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
+			vkCmdDrawIndexedIndirect(preDrawCommandBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
+			vkCmdEndRenderPass(preDrawCommandBuffers[i]);
 
 			bufferBarrier.srcAccessMask = VK_ACCESS_INDEX_READ_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -711,7 +780,7 @@ public:
 			bufferBarrier.buffer = HWRIndicesBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			bufferBarrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
@@ -720,7 +789,7 @@ public:
 			bufferBarrier.buffer = HWRIndicesBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 			imageMemBarrier.image = HWRZBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -732,7 +801,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			imageMemBarrier.image = HWRVisBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -744,17 +813,19 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			
 
 			/*
 			*
 			*  Merge Rasterize results
 			*
 			*/
-			vkCmdPushConstants(drawCmdBuffers[i], mergeRastPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipelineLayout, 0, 1, &descManager->getSet("mergeRast", 0), 0, NULL);
-			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			vkCmdPushConstants(preDrawCommandBuffers[i], mergeRastPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipeline);
+			vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, mergeRastPipelineLayout, 0, 1, &descManager->getSet("mergeRast", 0), 0, NULL);
+			vkCmdDispatch(preDrawCommandBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 
 			imageMemBarrier.image = HWRZBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -766,7 +837,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			imageMemBarrier.image = HWRVisBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -778,7 +849,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 
 			imageMemBarrier.image = FinalZBuffer.image;
@@ -791,7 +862,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			imageMemBarrier.image = FinalVisBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -803,7 +874,19 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+
+			imageMemBarrier.image = SWRBuffer.image;
+			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			imageMemBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			imageMemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+			imageMemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			imageMemBarrier.subresourceRange.baseMipLevel = 0;
+			imageMemBarrier.subresourceRange.levelCount = 1;
+			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
+			imageMemBarrier.subresourceRange.layerCount = 1;
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			
 
@@ -812,24 +895,24 @@ public:
 			*  Shading
 			*
 			*/
-			vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-			vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-			vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
+			vkCmdBeginRenderPass(preDrawCommandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+			vkCmdSetViewport(preDrawCommandBuffers[i], 0, 1, &viewport);
+			vkCmdSetScissor(preDrawCommandBuffers[i], 0, 1, &scissor);
 			// Skybox
 			if (displaySkybox)
 			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 4), 0, NULL);
-				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
-				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-				models.skybox.draw(drawCmdBuffers[i]);
+				vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 4), 0, NULL);
+				vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+				vkCmdPushConstants(preDrawCommandBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+				models.skybox.draw(preDrawCommandBuffers[i]);
 			}
 
 			
 			// Objects shading
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipelineLayout, 0, 1, &descManager->getSet("shading", 0), 0, 0);
-			vkCmdPushConstants(drawCmdBuffers[i], shadingPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-			vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipeline);
+			vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, shadingPipelineLayout, 0, 1, &descManager->getSet("shading", 0), 0, 0);
+			vkCmdPushConstants(preDrawCommandBuffers[i], shadingPipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+			vkCmdDraw(preDrawCommandBuffers[i], 3, 1, 0, 0);
 
 			// Objects
 			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 0), 0, NULL);
@@ -858,8 +941,8 @@ public:
 			//vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 2), 0, NULL);
 			//vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
 			//models.cube.draw(drawCmdBuffers[i]);
-			drawUI(drawCmdBuffers[i]);
-			vkCmdEndRenderPass(drawCmdBuffers[i]);
+			drawUI(preDrawCommandBuffers[i]);
+			vkCmdEndRenderPass(preDrawCommandBuffers[i]);
 
 			imageMemBarrier.image = FinalZBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -871,7 +954,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			imageMemBarrier.image = FinalVisBuffer.image;
 			imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -883,7 +966,7 @@ public:
 			imageMemBarrier.subresourceRange.levelCount = 1;
 			imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 			imageMemBarrier.subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 			/*
 			*
@@ -903,14 +986,14 @@ public:
 			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
 
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 			
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
-			vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &descManager->getSet("depthCopy", 0), 0, 0);
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipeline);
+			vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, depthCopyPipelineLayout, 0, 1, &descManager->getSet("depthCopy", 0), 0, 0);
 			///vkDeviceWaitIdle(device);
 			///std::cout << "444" << std::endl;
 			///ASSERT(depthStencil.view != VK_NULL_HANDLE, "test");
-			vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+			vkCmdDispatch(preDrawCommandBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 			//std::cout << "45" << std::endl;
 
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
@@ -924,7 +1007,7 @@ public:
 			imageMemBarriers[0].subresourceRange.levelCount = 1;
 			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, 0, 0, 0, 0, 0, imageMemBarriers.size(), imageMemBarriers.data());
 
 
 			imageMemBarriers[0] = vks::initializers::imageMemoryBarrier();
@@ -938,7 +1021,7 @@ public:
 			imageMemBarriers[0].subresourceRange.levelCount = 1;
 			imageMemBarriers[0].subresourceRange.baseArrayLayer = 0;
 			imageMemBarriers[0].subresourceRange.layerCount = 1;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, imageMemBarriers.data());
+			vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, imageMemBarriers.data());
 
 			/*
 			*
@@ -949,33 +1032,33 @@ public:
 			if(vis_topView)
 			{
 				renderPassBeginInfo.renderPass = topViewRenderPass;
-				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+				vkCmdBeginRenderPass(preDrawCommandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 				VkViewport viewport1 = vks::initializers::viewport(topViewWidth, topViewHeight, 0.0f, 1.0f);
 				viewport1.x = width - topViewWidth;
 				viewport1.y = height - topViewHeight;
-				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport1);
+				vkCmdSetViewport(preDrawCommandBuffers[i], 0, 1, &viewport1);
 
 				VkRect2D scissor1 = vks::initializers::rect2D(topViewWidth, topViewHeight, viewport1.x, viewport1.y);
-				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor1);
+				vkCmdSetScissor(preDrawCommandBuffers[i], 0, 1, &scissor1);
 				if (displaySkybox)
 				{
-					vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
-					vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
-					vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-					models.skybox.draw(drawCmdBuffers[i]);
+					vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 5), 0, NULL);
+					vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.skybox);
+					vkCmdPushConstants(preDrawCommandBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+					models.skybox.draw(preDrawCommandBuffers[i]);
 				}
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
-				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
+				vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 1), 0, NULL);
+				vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelines.pbr);
 				//vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &models.object.vertices.buffer, offsets);
-				vkCmdBindVertexBuffers(drawCmdBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
-				vkCmdBindIndexBuffer(drawCmdBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
-				vkCmdDrawIndexedIndirect(drawCmdBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
+				vkCmdBindVertexBuffers(preDrawCommandBuffers[i], 0, 1, &scene.vertices.buffer, offsets);
+				vkCmdBindIndexBuffer(preDrawCommandBuffers[i], HWRIndicesBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+				vkCmdDrawIndexedIndirect(preDrawCommandBuffers[i], hwrDrawIndexedIndirectBuffer.buffer, 0, 1, 0);
 
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
-				vkCmdPushConstants(drawCmdBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
-				models.cube.draw(drawCmdBuffers[i]);
-				vkCmdEndRenderPass(drawCmdBuffers[i]);
+				vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descManager->getSet("objectDraw", 3), 0, NULL);
+				vkCmdPushConstants(preDrawCommandBuffers[i], pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(RenderingPushConstants), &renderingPushConstants);
+				models.cube.draw(preDrawCommandBuffers[i]);
+				vkCmdEndRenderPass(preDrawCommandBuffers[i]);
 			}
 
 			/*
@@ -984,11 +1067,11 @@ public:
 			//vkDeviceWaitIdle(device);
 			//std::cout << "555" << std::endl;
 
-			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
+			vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipeline);
 			for (int j = 0; j < textures.hizbuffer.mipLevels - 1; j++)
 			{
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &descManager->getSet("hizBuild", j), 0, 0);
-				vkCmdDispatch(drawCmdBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
+				vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, hizComputePipelineLayout, 0, 1, &descManager->getSet("hizBuild", j), 0, 0);
+				vkCmdDispatch(preDrawCommandBuffers[i], (width + workgroupX - 1) / workgroupX, (height + workgroupY - 1) / workgroupY, 1);
 				VkImageMemoryBarrier imageMemBarrier = vks::initializers::imageMemoryBarrier();
 				imageMemBarrier.image = textures.hizbuffer.image;
 				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -1000,7 +1083,7 @@ public:
 				imageMemBarrier.subresourceRange.levelCount = 1;
 				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 				imageMemBarrier.subresourceRange.layerCount = 1;
-				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+				vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			}
 
 			/*
@@ -1020,16 +1103,16 @@ public:
 				imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
 				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 				imageMemBarrier.subresourceRange.layerCount = 1;
-				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+				vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 
 				renderPassBeginInfo.renderPass = renderPass;
-				vkCmdBeginRenderPass(drawCmdBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-				vkCmdSetViewport(drawCmdBuffers[i], 0, 1, &viewport);
-				vkCmdSetScissor(drawCmdBuffers[i], 0, 1, &scissor);
-				vkCmdBindDescriptorSets(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &descManager->getSet("debugQuad", 0), 0, NULL);
-				vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
-				vkCmdDraw(drawCmdBuffers[i], 3, 1, 0, 0);
-				vkCmdEndRenderPass(drawCmdBuffers[i]);
+				vkCmdBeginRenderPass(preDrawCommandBuffers[i], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+				vkCmdSetViewport(preDrawCommandBuffers[i], 0, 1, &viewport);
+				vkCmdSetScissor(preDrawCommandBuffers[i], 0, 1, &scissor);
+				vkCmdBindDescriptorSets(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipelineLayout, 0, 1, &descManager->getSet("debugQuad", 0), 0, NULL);
+				vkCmdBindPipeline(preDrawCommandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, debugQuadPipeline);
+				vkCmdDraw(preDrawCommandBuffers[i], 3, 1, 0, 0);
+				vkCmdEndRenderPass(preDrawCommandBuffers[i]);
 
 				imageMemBarrier.image = textures.hizbuffer.image;
 				imageMemBarrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1041,10 +1124,10 @@ public:
 				imageMemBarrier.subresourceRange.levelCount = textures.hizbuffer.mipLevels;
 				imageMemBarrier.subresourceRange.baseArrayLayer = 0;
 				imageMemBarrier.subresourceRange.layerCount = 1;
-				vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
+				vkCmdPipelineBarrier(preDrawCommandBuffers[i], VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, 0, 0, 0, 1, &imageMemBarrier);
 			}
 
-			VK_CHECK_RESULT(vkEndCommandBuffer(drawCmdBuffers[i]));
+			VK_CHECK_RESULT(vkEndCommandBuffer(preDrawCommandBuffers[i]));
 		}
 		//ASSERT(false, "debug interrupt");
 	}
@@ -1071,9 +1154,9 @@ public:
 
 		// Uncomment this part for performance test scene
 		modelMats.clear();
-		for (int i = -7; i <= 7; i++)
+		for (int i = -17; i <= 17; i++)
 		{
-			for (int j = -7; j <= 7; j++) 
+			for (int j = -17; j <= 17; j++) 
 			{
 				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
 				auto& instance = Instance(&naniteMesh, modelMat);
@@ -2927,6 +3010,7 @@ public:
 			&HWRIDBuffer.buffer,
 			&HWRIDBuffer.memory,
 			nullptr));
+		//ASSERT(false, "buffer size:"+std::to_string(scene.sceneIndicesCount / 8));
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -3003,7 +3087,7 @@ public:
 		hwrDrawIndexedIndirect.firstInstance = 0;
 		hwrDrawIndexedIndirect.indexCount = models.object.indexBuffer.size();
 		//drawIndexedIndirect.indexCount = naniteMesh.meshes[naniteMesh.meshes.size()-1].mesh.n_faces();
-		hwrDrawIndexedIndirect.instanceCount = 2;
+		hwrDrawIndexedIndirect.instanceCount = 1;
 		hwrDrawIndexedIndirect.vertexOffset = 0;
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
@@ -3616,6 +3700,9 @@ public:
 	{
 		VulkanExampleBase::prepareFrame();
 
+		VK_CHECK_RESULT(vkWaitForFences(device, 1, &inFlightFence, VK_TRUE, UINT64_MAX));
+		VK_CHECK_RESULT(vkResetFences(device, 1, &inFlightFence));
+
 		if (hwrDrawIndexedIndirectBuffer.mapped)
 		{
 			//
@@ -3626,7 +3713,7 @@ public:
 			uint32_t zero = 0;
 			memcpy(swrNumVerticesBuffer.mapped, &zero, sizeof(uint32_t));
 			swrNumVerticesBuffer.flush();
-			vkDeviceWaitIdle(device);
+			//vkDeviceWaitIdle(device);
 		}
 
 		uboCullingMatrices.currView = camera.matrices.view;
@@ -3634,9 +3721,27 @@ public:
 		memcpy(cullingUniformBuffer.mapped, &uboCullingMatrices, sizeof(uboCullingMatrices));
 		cullingUniformBuffer.flush();
 
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &drawCmdBuffers[currentBuffer];
-		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE));
+		VkSubmitInfo submitInfo0 = vks::initializers::submitInfo();
+		submitInfo0.commandBufferCount = 1;
+		submitInfo0.pCommandBuffers = &drawCmdBuffers[currentBuffer];
+		submitInfo0.waitSemaphoreCount = 1;
+		submitInfo0.pWaitSemaphores = &semaphores.presentComplete;
+		VkPipelineStageFlags submitPipelineStages0 = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+		submitInfo0.pWaitDstStageMask = &submitPipelineStages0;
+		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo0, rasterizeFinishedFence));
+
+		//vkDeviceWaitIdle(device);
+
+		VK_CHECK_RESULT(vkWaitForFences(device, 1, &rasterizeFinishedFence, VK_TRUE, UINT64_MAX));
+		VK_CHECK_RESULT(vkResetFences(device, 1, &rasterizeFinishedFence));
+
+		VkSubmitInfo submitInfo1 = vks::initializers::submitInfo();
+		submitInfo1.commandBufferCount = 1;
+		submitInfo1.pCommandBuffers = &preDrawCommandBuffers[currentBuffer];
+		submitInfo1.signalSemaphoreCount = 1;
+		submitInfo1.pSignalSemaphores = &semaphores.renderComplete;
+		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo1, inFlightFence));
+
 		VulkanExampleBase::submitFrame();
 
 		uboCullingMatrices.lastView = camera.matrices.view;
@@ -3871,12 +3976,40 @@ public:
 		VK_CHECK_RESULT(vkCreateFramebuffer(vulkanDevice->logicalDevice, &frameBufferCreateInfo, nullptr, &HWRFramebuffer));
 	}
 
+	void createFence()
+	{
+		VkFenceCreateInfo fenceInfo = {};
+		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT; // Optional flags
+
+		VK_CHECK_RESULT(vkCreateFence(device, &fenceInfo, NULL, &inFlightFence));
+
+		fenceInfo.flags = 0;
+		VK_CHECK_RESULT(vkCreateFence(device, &fenceInfo, NULL, &rasterizeFinishedFence));
+	}
+
+	virtual void createCommandBuffers()
+	{
+		VulkanExampleBase::createCommandBuffers();
+
+		preDrawCommandBuffers.resize(swapChain.imageCount);
+
+		VkCommandBufferAllocateInfo cmdBufAllocateInfo =
+			vks::initializers::commandBufferAllocateInfo(
+				cmdPool,
+				VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+				static_cast<uint32_t>(preDrawCommandBuffers.size()));
+
+		VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &cmdBufAllocateInfo, preDrawCommandBuffers.data()));
+	}
+
 	void prepare()
 	{
 		enabledDeviceExtensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
 		enabledDeviceExtensions.push_back(VK_EXT_SHADER_IMAGE_ATOMIC_INT64_EXTENSION_NAME);
 		enabledInstanceExtensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 		VulkanExampleBase::prepare();
+		createFence();
 		createRasterizeBuffer();
 		loadAssets();
 		generateBRDFLUT();

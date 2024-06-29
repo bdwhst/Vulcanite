@@ -113,6 +113,8 @@ public:
 
 	uint32_t workgroupX = 8, workgroupY = 8;
 
+	uint32_t numCulledClusters;
+
 	struct Meshes {
 		vkglTF::Model skybox;
 		vkglTF::Model object;
@@ -546,7 +548,7 @@ public:
 			*  Culling
 			*
 			*/
-			/*bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+			bufferBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
 			bufferBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -564,7 +566,7 @@ public:
 			bufferBarrier.buffer = swrNumVerticesBuffer.buffer;
 			bufferBarrier.offset = 0;
 			bufferBarrier.size = VK_WHOLE_SIZE;
-			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);*/
+			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 
 			vkCmdBindPipeline(drawCmdBuffers[i], VK_PIPELINE_BIND_POINT_COMPUTE, cullingPipeline);
@@ -638,7 +640,7 @@ public:
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
 
-			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -648,7 +650,7 @@ public:
 
 			vkCmdPipelineBarrier(drawCmdBuffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 1, &bufferBarrier, 0, nullptr);
 
-			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			bufferBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			bufferBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			bufferBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -2981,6 +2983,7 @@ public:
 			&culledClusterIndicesBuffer.buffer,
 			&culledClusterIndicesBuffer.memory,
 			nullptr));
+		//VK_CHECK_RESULT(culledClusterIndicesBuffer.map(sizeof(uint32_t)));
 
 		VK_CHECK_RESULT(vulkanDevice->createBuffer(
 			VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
@@ -3728,12 +3731,17 @@ public:
 		submitInfo0.pWaitSemaphores = &semaphores.presentComplete;
 		VkPipelineStageFlags submitPipelineStages0 = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		submitInfo0.pWaitDstStageMask = &submitPipelineStages0;
-		VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo0, cullingFinishedFence));
-
-		//vkDeviceWaitIdle(device);
-
-		VK_CHECK_RESULT(vkWaitForFences(device, 1, &cullingFinishedFence, VK_TRUE, UINT64_MAX));
-		VK_CHECK_RESULT(vkResetFences(device, 1, &cullingFinishedFence));
+		static bool useFenceBetweenCullingAndRaster = false;
+		if (useFenceBetweenCullingAndRaster)
+		{
+			VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo0, cullingFinishedFence));
+			VK_CHECK_RESULT(vkWaitForFences(device, 1, &cullingFinishedFence, VK_TRUE, UINT64_MAX));
+			VK_CHECK_RESULT(vkResetFences(device, 1, &cullingFinishedFence))
+		}
+		else
+		{
+			VK_CHECK_RESULT(vkQueueSubmit(queue, 1, &submitInfo0, VK_NULL_HANDLE));
+		}
 
 		VkSubmitInfo submitInfo1 = vks::initializers::submitInfo();
 		submitInfo1.commandBufferCount = 1;
@@ -4051,15 +4059,20 @@ public:
 		std::string s1 = "Num triangles without vulkanite:" + std::to_string(scene.sceneIndicesCount / 3);
 		overlay->text(s1.c_str());
 
+
 		memcpy(&hwrDrawIndexedIndirect, hwrDrawIndexedIndirectBuffer.mapped, sizeof(DrawIndexedIndirect));
 		uint32_t swrVertSize;
 		memcpy(&swrVertSize, swrNumVerticesBuffer.mapped, sizeof(uint32_t));
+
 		std::string s2 = "Num triangles hw raserized:" + std::to_string(hwrDrawIndexedIndirect.indexCount / 3);
 		overlay->text(s2.c_str());
 		std::string s3 = "Num triangles sw raserized:" + std::to_string(swrVertSize / 3);
 		overlay->text(s3.c_str());
 		std::string s4 = "Num triangles raserized in total:" + std::to_string((swrVertSize + hwrDrawIndexedIndirect.indexCount) / 3);
 		overlay->text(s4.c_str());
+		/*std::string s5 = "Num culled clusters:" + std::to_string(numCulledClusters);
+		overlay->text(s5.c_str());*/
+
 		if (overlay->header("Settings")) {
 			if (overlay->inputFloat("Exposure", &uboParams.exposure, 0.1f, 2)) {
 				updateParams();

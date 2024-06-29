@@ -1134,6 +1134,88 @@ public:
 		//ASSERT(false, "debug interrupt");
 	}
 
+	void createScene1()
+	{
+		// performance test scene
+		modelMats.clear();
+		for (int i = -17; i <= 17; i++)
+		{
+			for (int j = -17; j <= 17; j++) 
+			{
+				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
+				auto& instance = Instance(&naniteMesh, modelMat);
+				modelMats.emplace_back(modelMat);
+				scene.naniteObjects.emplace_back(instance);
+			}
+		}
+	}
+
+	void createScene2()
+	{
+		// normal scene
+		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		auto & instance2 = Instance(&naniteMesh, modelMats[1]);
+		//auto & instance3 = Instance(&naniteMesh, modelMats[2]);
+		scene.naniteObjects.push_back(instance1);
+		scene.naniteObjects.push_back(instance2);
+		//scene.naniteObjects.push_back(instance3);
+	}
+
+	void createScene3()
+	{
+		// normal multi-mesh scene
+		auto & instance1 = Instance(&naniteMesh, modelMats[0]);
+		scene.naniteObjects.push_back(instance1);
+		NaniteMesh naniteMesh2;
+		naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
+		naniteMesh2.loadvkglTFModel(models.object);
+		naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
+		for (int i = 0; i < naniteMesh2.meshes.size(); i++)
+		{
+			naniteMesh2.meshes[i].initUniqueVertexBuffer();
+			naniteMesh2.meshes[i].initVertexBuffer();
+			naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
+		}
+		scene.naniteMeshes.push_back(naniteMesh2);
+		auto& instance2 = Instance(&naniteMesh2, modelMats[1]);
+		scene.naniteObjects.push_back(instance2);
+	}
+
+	void createScene4()
+	{
+		// performance test multi-mesh scene
+		NaniteMesh naniteMesh2;
+		naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
+		naniteMesh2.loadvkglTFModel(models.object);
+		naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
+		for (int i = 0; i < naniteMesh2.meshes.size(); i++)
+		{
+			naniteMesh2.meshes[i].initUniqueVertexBuffer();
+			naniteMesh2.meshes[i].initVertexBuffer();
+			naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
+		}
+		scene.naniteMeshes.push_back(naniteMesh2);
+		
+		modelMats.clear();
+		for (int i = -2; i <= 2; i++)
+		{
+			for (int j = -2; j <= 2; j++) 
+			{
+				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
+				if (i % 2) {
+					auto& instance = Instance(&naniteMesh, modelMat);
+					scene.naniteObjects.push_back(instance);
+				}
+				else{
+					auto& instance = Instance(&naniteMesh2, modelMat);
+					scene.naniteObjects.push_back(instance);
+				}
+				modelMats.push_back(modelMat);
+		
+			}
+		}
+	}
+
 	void loadAssets()
 	{
 		const uint32_t glTFLoadingFlags = vkglTF::FileLoadingFlags::PreTransformVertices | vkglTF::FileLoadingFlags::PreMultiplyVertexColors | vkglTF::FileLoadingFlags::FlipY;
@@ -1153,78 +1235,9 @@ public:
 			naniteMesh.meshes[i].createVertexBuffer(vulkanDevice, queue);
 		}
 		scene.naniteMeshes.emplace_back(naniteMesh);
-
-		// Uncomment this part for performance test scene
-		modelMats.clear();
-		for (int i = -17; i <= 17; i++)
-		{
-			for (int j = -17; j <= 17; j++) 
-			{
-				auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, 1.2f, j * 3));
-				auto& instance = Instance(&naniteMesh, modelMat);
-				modelMats.emplace_back(modelMat);
-				scene.naniteObjects.emplace_back(instance);
-			}
-		}
-
-		// Uncomment this part for normal scene
-		//auto & instance1 = Instance(&naniteMesh, modelMats[0]);
-		//auto & instance2 = Instance(&naniteMesh, modelMats[1]);
-		////auto & instance3 = Instance(&naniteMesh, modelMats[2]);
-		//scene.naniteObjects.push_back(instance1);
-		//scene.naniteObjects.push_back(instance2);
-		////scene.naniteObjects.push_back(instance3);
-
-		// Uncomment this part for normal multi-mesh scene
-		/*auto & instance1 = Instance(&naniteMesh, modelMats[0]);
-		scene.naniteObjects.push_back(instance1);
-		NaniteMesh naniteMesh2;
-		naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
-		naniteMesh2.loadvkglTFModel(models.object);
-		naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
-		for (int i = 0; i < naniteMesh2.meshes.size(); i++)
-		{
-			naniteMesh2.meshes[i].initUniqueVertexBuffer();
-			naniteMesh2.meshes[i].initVertexBuffer();
-			naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
-		}
-		scene.naniteMeshes.push_back(naniteMesh2);
-		auto& instance2 = Instance(&naniteMesh2, modelMats[1]);
-		scene.naniteObjects.push_back(instance2);*/
-
-		// Uncomment this part for performance test multi-mesh scene
-		//NaniteMesh naniteMesh2;
-		//naniteMesh2.setModelPath((getAssetPath() + "models/bunny/").c_str());
-		//naniteMesh2.loadvkglTFModel(models.object);
-		//naniteMesh2.initNaniteInfo(getAssetPath() + "models/bunny.gltf", true);
-		//for (int i = 0; i < naniteMesh2.meshes.size(); i++)
-		//{
-		//	naniteMesh2.meshes[i].initUniqueVertexBuffer();
-		//	naniteMesh2.meshes[i].initVertexBuffer();
-		//	naniteMesh2.meshes[i].createVertexBuffer(vulkanDevice, queue);
-		//}
-		//scene.naniteMeshes.push_back(naniteMesh2);
-		//
-		//modelMats.clear();
-		//for (int i = -2; i <= 2; i++)
-		//{
-		//	for (int j = -2; j <= 2; j++) 
-		//	{
-		//		auto& modelMat = glm::translate(glm::mat4(1.0f), glm::vec3(i * 3, j * 3, 0.0f));
-		//		if (i % 2) {
-		//			auto& instance = Instance(&naniteMesh, modelMat);
-		//			scene.naniteObjects.push_back(instance);
-		//		}
-		//		else{
-		//			auto& instance = Instance(&naniteMesh2, modelMat);
-		//			scene.naniteObjects.push_back(instance);
-		//		}
-		//		modelMats.push_back(modelMat);
-		//
-		//	}
-		//}
-
-		////
+		
+		createScene2();
+		
 		scene.createNaniteSceneInfo(vulkanDevice, queue);
 		//reducedModel.simplifyModel(vulkanDevice, queue);
 		textures.environmentCube.loadFromFile(getAssetPath() + "textures/hdr/gcanyon_cube.ktx", VK_FORMAT_R16G16B16A16_SFLOAT, vulkanDevice, queue);
